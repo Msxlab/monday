@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE `leaves` MODIFY `status` ENUM('pending', 'approved', 'rejected', 'cancelled') NOT NULL DEFAULT 'pending';
+
+-- AlterTable
+ALTER TABLE `users` ADD COLUMN `failed_login_count` INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN `locked_until` DATETIME(3) NULL;

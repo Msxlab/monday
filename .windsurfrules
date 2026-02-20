@@ -1,0 +1,100 @@
+# DESIGNER TRACKER — GELİŞTİRME KURALLARI
+
+## Genel Prensipler
+- Her component Typescript ile yazılmalı
+- Tüm API endpointleri Zod ile validate edilmeli
+- Her yeni endpoint için permission middleware eklenmeli
+- Sensitive data (financial, client) asla log'a yazılmamalı
+- Her DB sorgusu Prisma ORM üzerinden yapılmalı (raw SQL yasak)
+
+## Klasör Yapısı (Backend)
+```
+src/
+├── controllers/     ← Route handler'lar
+├── services/        ← İş mantığı
+├── middleware/      ← Auth, permission, validation
+├── routes/          ← Express router
+├── utils/           ← Yardımcı fonksiyonlar
+├── jobs/            ← Cron job'lar
+├── types/           ← TypeScript tipleri
+└── index.ts
+```
+
+## Klasör Yapısı (Frontend)
+```
+app/
+├── (auth)/          ← Login sayfaları
+├── admin/           ← Admin sayfaları
+├── designer/        ← Designer sayfaları
+├── production/      ← Production sayfaları
+components/
+├── ui/              ← shadcn base components
+├── shared/          ← Ortak bileşenler
+├── admin/           ← Admin'e özel
+└── designer/        ← Designer'a özel
+```
+
+## Güvenlik Kuralları
+- JWT doğrulama: Her korumalı endpoint'te `authenticate` middleware
+- Permission: Her endpoint'te `authorize(roles[])` middleware
+- Field filter: `serializeForRole(data, userRole)` ile response filtrele
+- Input: Her endpoint başında `validateBody(schema)` kullan
+- Financial data: Ayrı servis ve endpoint — `finance.service.ts`
+
+## Naming Convention
+- Dosyalar: kebab-case (`project-service.ts`)
+- Fonksiyonlar: camelCase (`getProjectById`)
+- Component: PascalCase (`ProjectCard`)
+- DB field: snake_case (`created_at`)
+- Env vars: UPPER_SNAKE_CASE
+
+## Error Handling
+- Tüm async fonksiyonlar try-catch
+- Özel hata sınıfları: `AppError`, `ValidationError`, `UnauthorizedError`
+- Production'da stack trace gösterilmez
+- Tüm hatalar Winston logger ile loglanır
+
+## Monday.com
+- Monday işlemleri sadece `monday.service.ts` içinde
+- Sync işlemleri queue'ya alınır (başarısızlık durumunda retry)
+- API token `.env`'de değil, encrypted DB'de
+
+## Cron Jobs
+- `jobs/` klasöründe ayrı dosyalar
+- Cron trigger sadece internal endpoint ile (auth token ile korunur)
+- Hata durumunda admin'e email
+
+## Test
+- Her service için unit test yazılmalı (Jest)
+- API testleri Supertest ile
+- Permission testleri: Her rol için ayrı test case
+
+## cPanel Uyumluluk
+- Absolute path kullanma, `__dirname` kullan
+- Port 5000 (cPanel proxy)
+- Graceful shutdown (PM2 ile uyumlu)
+- File upload: `/app/uploads/` (public dışında)
+
+## Tech Stack
+- Frontend: Next.js 14 (App Router), Tailwind CSS, shadcn/ui, Zustand, TanStack Query, Recharts, @dnd-kit/core, next-pwa, Lucide React, date-fns, React Hook Form + Zod
+- Backend: Node.js 20 LTS, Express.js, Prisma ORM, MySQL 8.0, JWT + Refresh Token (httpOnly cookie), Multer, node-cron, Nodemailer, Zod, Winston
+
+## Kullanıcı Rolleri
+- `super_admin` | `admin` | `senior_designer` | `designer` | `production`
+- Rol hiyerarşisi: super_admin > admin > senior_designer / designer / production
+
+## Field-Level Permission
+- Finansal alanlar (`project_financials` tablosu) sadece admin ve super_admin'e açık
+- API response'ta yetkisiz alanlar çıkarılır — sadece UI'da gizleme yok, veri hiç gelmez
+- `permission_overrides` tablosu ile dinamik override desteklenir
+
+## Proje Durum Akışı
+`new → designing → review → approved → in_production → done`
+Revizyon: `designing ↔ revision` döngüsü
+
+## Veritabanı
+- ORM: Prisma (raw SQL yasak)
+- DB: MySQL 8.0 (cPanel MySQL Manager)
+- Migration: `prisma migrate deploy` (production)
+- Finansal veriler ayrı tablo: `project_financials`
+- Müşteri verileri ayrı tablo: `project_clients`
