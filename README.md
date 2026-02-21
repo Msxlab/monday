@@ -13,10 +13,7 @@ Tasarim ekibinin proje takibini, performans analizini ve is yuku yonetimini tek 
 - **Validation:** Zod
 - **Logging:** Winston
 
-### Frontend (Durum: planned / in-progress)
-> Bu repoda su anda calisir bir frontend implementasyonu yoktur. `frontend/` klasoru mevcut ancak kaynak kod bulunmamaktadir.
-
-Planlanan teknoloji secimleri:
+### Frontend
 - **Framework:** Next.js 14 (App Router)
 - **UI:** Tailwind CSS + shadcn/ui
 - **State:** Zustand
@@ -54,7 +51,52 @@ Varsayilan giris bilgileri:
 
 ### 3. Frontend
 
-Frontend uygulamasi henuz bu repoda yoktur (planned / in-progress). Bu nedenle calistirilabilir bir frontend kurulum komutu bulunmamaktadir.
+```bash
+cd frontend
+npm install
+
+# Opsiyonel: API adresini belirtmek icin
+echo "NEXT_PUBLIC_API_URL=http://localhost:5000/api" > .env.local
+
+npm run dev
+```
+
+Frontend varsayilan olarak `http://localhost:3000` adresinde calisir.
+
+Production build adimlari:
+
+```bash
+cd frontend
+npm install
+npm run build
+npm run start
+```
+
+## Frontend Route Yapisi ve Modul Kapsami
+
+Frontend App Router yapi olarak 3 ana role-bazli panel uzerinden calisir:
+
+### `/admin`
+- Dashboard: `/admin`
+- Proje yonetimi: `/admin/projects`, `/admin/projects/new`, `/admin/projects/[id]`, `/admin/projects/[id]/edit`
+- Proje gorunumleri: `/admin/projects/kanban`, `/admin/projects/calendar`, `/admin/projects/gantt`
+- Tasarimci yonetimi: `/admin/designers`, `/admin/designers/[id]`
+- Operasyon modulleri: `/admin/analytics`, `/admin/production`, `/admin/leaves`, `/admin/finance`, `/admin/users`, `/admin/audit-log`, `/admin/role-upgrades`
+- Ayarlar: `/admin/settings` ve altinda `monday`, `notifications`, `permissions`, `schedule`, `security`, `user-permissions`
+
+### `/designer`
+- Dashboard: `/designer`
+- Projeler: `/designer/projects`, `/designer/projects/[id]`
+- Kisisel operasyonlar: `/designer/daily-logs`, `/designer/performance`, `/designer/leave`, `/designer/role-upgrade`
+
+### `/production`
+- Dashboard: `/production`
+- Siparis yonetimi: `/production/orders`
+
+### Ortak ekranlar
+- Giris: `/`
+- Bildirimler: `/notifications`
+- Profil: `/profile`
 
 ## Mevcut Endpoint Listesi (`/api` alti)
 
@@ -101,12 +143,12 @@ new -> designing -> review -> approved -> in_production -> done
          designing (tekrar)
 ```
 
-## Eksik Moduller / Roadmap
+## Known Gaps
 
-- **UI (Frontend Uygulamasi):** Login, dashboard, rol bazli ekranlar ve ortak component sistemi implementasyonu.
-- **Multi-tenant:** Tenant izolasyonu, tenant bazli yetkilendirme ve tenant onboarding akisi.
-- **AI Assistant:** Gorev/yorum ozetleme, onceliklendirme yardimi ve operasyonel copilot senaryolari.
-- **Theme System:** Acik/koyu tema, brand bazli tema tokenlari ve merkezi tema konfigrasyonu.
+- **Backend API var, frontend ekrani henuz yok:** `tags`, `subtasks`, `comments`, `uploads`, `push`, `health` endpointleri icin frontend tarafinda dogrudan bir modul/sayfa tanimli degil.
+- **Kapsamli rol/izin yonetimi eksigi:** `/api/user-permissions` ve detayli yetki konfigrasyonu backend'de mevcut olsa da, frontend'te tum senaryolari kapsayan merkezi bir izin yonetim akisi tamamlanmadi.
+- **AI Assistant urunlesmesi:** Kod tabaninda AI ile ilgili componentler bulunsa da bu ozelligin uctan uca, urun seviyesinde aktif bir akisa baglandigi dokumante edilmis degil.
+- **Multi-tenant mimari:** Tenant izolasyonu, tenant bazli onboarding ve tenant-level policy yonetimi henuz uygulanmamis durumda.
 
 ## Klasor Yapisi
 
