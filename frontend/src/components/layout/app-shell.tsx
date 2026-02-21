@@ -7,7 +7,7 @@ import { Topbar } from '@/components/layout/topbar';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLogin = pathname === '/login';
+  const isLogin = pathname === '/';
 
   return (
     <AuthGuard>
