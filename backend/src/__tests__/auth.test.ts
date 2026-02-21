@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+import prisma from '../utils/prisma';
 import request from 'supertest';
 import { createTestApp } from './setup';
 
@@ -90,5 +92,75 @@ describe('Auth API', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
     });
+  });
+});
+
+
+describe('Auth token hashing security', () => {
+  const extractRefreshCookieToken = (setCookieHeader: string | string[] | undefined) => {
+    const cookies = Array.isArray(setCookieHeader) ? setCookieHeader : (setCookieHeader ? [setCookieHeader] : []);
+    const cookie = cookies.find((c) => c.startsWith('refreshToken='));
+    return cookie?.split(';')[0]?.split('=')[1] ?? '';
+  };
+
+  it('should store only refresh token hash in DB and invalidate rotated token', async () => {
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'admin@designertracker.com', password: 'Admin@123456' });
+
+    expect(loginRes.status).toBe(200);
+    const initialRefreshToken = extractRefreshCookieToken(loginRes.headers['set-cookie']);
+    expect(initialRefreshToken).toBeTruthy();
+
+    const refreshTokenHash = createHash('sha256').update(initialRefreshToken).digest('hex');
+    const storedSession = await prisma.refreshToken.findUnique({ where: { token_hash: refreshTokenHash } });
+
+    expect(storedSession).toBeTruthy();
+    expect(storedSession?.token_hash).toBe(refreshTokenHash);
+    expect(storedSession?.token_hash).not.toBe(initialRefreshToken);
+
+    const refreshRes = await request(app)
+      .post('/api/auth/refresh')
+      .set('Cookie', `refreshToken=${initialRefreshToken}`)
+      .send({});
+
+    expect(refreshRes.status).toBe(200);
+
+    const replayRes = await request(app)
+      .post('/api/auth/refresh')
+      .set('Cookie', `refreshToken=${initialRefreshToken}`)
+      .send({});
+
+    expect(replayRes.status).toBe(401);
+  });
+
+  it('should store only password reset token hash in DB', async () => {
+    const { emailService } = await import('../services/email.service');
+    const emailSpy = jest.spyOn(emailService, 'send').mockResolvedValue(true);
+
+    const forgotRes = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: 'admin@designertracker.com' });
+
+    expect(forgotRes.status).toBe(200);
+    expect(emailSpy).toHaveBeenCalled();
+
+    const html = String(emailSpy.mock.calls[0]?.[0]?.html ?? '');
+    const tokenMatch = html.match(/reset-password\?token=([a-f0-9]{64})/i);
+    expect(tokenMatch).toBeTruthy();
+    const rawToken = tokenMatch?.[1] ?? '';
+
+    const user = await prisma.user.findUnique({ where: { email: 'admin@designertracker.com' } });
+    const rawTokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    expect(user?.password_reset_token_hash).toBe(rawTokenHash);
+    expect(user?.password_reset_token_hash).not.toBe(rawToken);
+
+    const impossibleRawLookup = await prisma.user.findFirst({
+      where: { password_reset_token_hash: rawToken } as never,
+    });
+    expect(impossibleRawLookup).toBeNull();
+
+    emailSpy.mockRestore();
   });
 });

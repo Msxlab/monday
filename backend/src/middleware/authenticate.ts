@@ -4,6 +4,7 @@ import { AuthRequest, JwtPayload } from '../types';
 import { UnauthorizedError } from '../utils/errors';
 import logger from '../utils/logger';
 import prisma from '../utils/prisma';
+import { setTenantCompanyId } from '../utils/tenant-context';
 
 export const authenticate = async (
   req: AuthRequest,
@@ -30,7 +31,7 @@ export const authenticate = async (
     // Token revocation check: verify user is still active and not locked
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { is_active: true, locked_until: true },
+      select: { is_active: true, locked_until: true, company_id: true, active_company_id: true },
     });
 
     if (!user || !user.is_active) {
@@ -41,6 +42,12 @@ export const authenticate = async (
       throw new UnauthorizedError('Account is locked');
     }
 
+    const effectiveCompanyId = user.active_company_id ?? user.company_id;
+    if (decoded.companyId !== effectiveCompanyId) {
+      throw new UnauthorizedError('Token tenant is invalid');
+    }
+
+    setTenantCompanyId(decoded.companyId);
     req.user = decoded;
     next();
   } catch (error) {

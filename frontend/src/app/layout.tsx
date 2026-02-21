@@ -1,31 +1,18 @@
-import type { Metadata } from "next"
-import localFont from "next/font/local"
-import "./globals.css"
-import { ThemeProvider } from "@/components/providers/theme-provider"
-
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-})
+import type { Metadata } from 'next';
+import { AppShell } from '@/components/layout/app-shell';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "Proje Yönetim Sistemi",
-  description: "Kapsamlı proje yönetim ve takip platformu",
-}
+  title: 'Designer Project Tracker',
+  description: 'Next.js 14 admin frontend',
+};
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" suppressHydrationWarning>
-      <body className={`${geistSans.variable} font-sans antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
-        </ThemeProvider>
+    <html lang="tr">
+      <body>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
-  )
+  );
 }
