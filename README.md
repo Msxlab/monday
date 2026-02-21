@@ -112,31 +112,42 @@ new -> designing -> review -> approved -> in_production -> done
 ```
 monday/
 ├── backend/
-│   ├── prisma/schema.prisma       # Veritabani semasi
+│   ├── prisma/schema.prisma
 │   ├── src/
-│   │   ├── controllers/           # Route handler'lar
-│   │   ├── services/              # Is mantigi
-│   │   ├── middleware/            # Auth, permission, validation
-│   │   ├── routes/                # Express router
-│   │   ├── utils/                 # Logger, Prisma, errors, permissions, audit
-│   │   ├── types/                 # TypeScript tipleri
-│   │   ├── seed.ts                # DB seed (super admin)
-│   │   └── index.ts               # Entry point
-│   ├── .env                       # Cevre degiskenleri
+│   │   ├── controllers/
+│   │   ├── middleware/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   ├── __tests__/
+│   │   ├── seed.ts
+│   │   └── index.ts
 │   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── page.tsx           # Login sayfasi
-│   │   │   ├── admin/             # Admin sayfalari
-│   │   │   ├── designer/          # Designer sayfalari
-│   │   │   └── production/        # Production sayfalari
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── login/page.tsx
+│   │   │   ├── admin/page.tsx
+│   │   │   ├── projects/page.tsx
+│   │   │   ├── users/page.tsx
+│   │   │   └── settings/page.tsx
 │   │   ├── components/
-│   │   │   ├── ui/                # shadcn bilesenler
-│   │   │   └── shared/            # Ortak bilesenler (Sidebar, Topbar, AuthGuard)
-│   │   └── lib/                   # API client, auth store, constants
-│   ├── .env.local                 # Frontend env
+│   │   │   ├── layout/
+│   │   │   │   ├── app-shell.tsx
+│   │   │   │   ├── auth-guard.tsx
+│   │   │   │   ├── sidebar.tsx
+│   │   │   │   ├── topbar.tsx
+│   │   │   │   └── api-status-card.tsx
+│   │   │   └── ui/
+│   │   ├── config/routes.ts
+│   │   └── lib/utils.ts
+│   ├── components.json
+│   ├── next.config.ts
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
 │   └── package.json
-├── .windsurfrules                 # Gelistirme kurallari
+├── .windsurfrules
 └── DESIGNER_TRACKER_SYSTEM_PLAN.md
 ```
