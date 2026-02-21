@@ -17,7 +17,9 @@ export function Sidebar() {
 
       <nav className="space-y-1">
         {sidebarMenu.map((item) => {
-          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+          const isActive = item.exactMatch
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(item.href + '/');
 
           return (
             <Link
