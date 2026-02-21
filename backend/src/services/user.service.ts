@@ -36,7 +36,7 @@ interface ListUsersParams {
 }
 
 export class UserService {
-  async create(data: CreateUserDto, createdById?: number) {
+  async create(data: CreateUserDto, createdById?: number, companyId?: number) {
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) {
       throw new AppError('Email already in use', 409);
@@ -44,8 +44,19 @@ export class UserService {
 
     const password_hash = await AuthService.hashPassword(data.password);
 
+    let targetCompanyId = companyId;
+    if (!targetCompanyId && createdById) {
+      const creator = await prisma.user.findUnique({ where: { id: createdById }, select: { active_company_id: true, company_id: true } });
+      targetCompanyId = creator?.active_company_id ?? creator?.company_id;
+    }
+    if (!targetCompanyId) {
+      throw new AppError('Company context is required to create user', 400);
+    }
+
     const user = await prisma.user.create({
       data: {
+        company_id: targetCompanyId,
+        active_company_id: targetCompanyId,
         email: data.email,
         password_hash,
         first_name: data.first_name,

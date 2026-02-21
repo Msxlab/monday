@@ -7,9 +7,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Company {
+  id         Int           @id @default(autoincrement())
+  name       String
+  slug       String        @unique
+  status     CompanyStatus @default(active)
+  created_at DateTime      @default(now())
+  updated_at DateTime      @updatedAt
+
+  users             User[]
+  active_users      User[]         @relation("UserActiveCompany")
+  projects          Project[]
+  leaves            Leave[]
+  notifications     Notification[]
+  production_orders ProductionOrder[]
+  audit_logs        AuditLog[]
+
+  @@map("companies")
+}
+
+enum CompanyStatus {
+  active
+  inactive
+}
+
 // ─── Kullanıcılar ───
 model User {
   id            Int       @id @default(autoincrement())
+  company_id     Int?
+  active_company_id Int?
   email         String    @unique
   password_hash String
   first_name    String
@@ -53,7 +79,11 @@ model User {
   reviewed_upgrades        RoleUpgradeRequest[]      @relation("UpgradeReviewer")
   push_subscriptions       PushSubscription[]
   subtask_assignments      ProjectSubtask[]          @relation("SubtaskAssignee")
+  company                  Company?                   @relation(fields: [company_id], references: [id])
+  active_company           Company?                   @relation("UserActiveCompany", fields: [active_company_id], references: [id])
 
+  @@index([company_id])
+  @@index([active_company_id])
   @@map("users")
 }
 
@@ -83,7 +113,8 @@ model RefreshToken {
 // ─── Projeler ───
 model Project {
   id                    Int           @id @default(autoincrement())
-  nj_number             String        @unique
+  company_id            Int?
+  nj_number             String
   title                 String
   project_type          ProjectType   @default(single_unit)
   assigned_designer_id  Int?
@@ -118,7 +149,10 @@ model Project {
   attachments       ProjectAttachment[]
   tag_assignments   ProjectTagAssignment[]
   subtasks          ProjectSubtask[]
+  company           Company?         @relation(fields: [company_id], references: [id])
 
+  @@unique([company_id, nj_number])
+  @@index([company_id])
   @@index([assigned_designer_id])
   @@index([created_by_id])
   @@index([status])
@@ -308,6 +342,7 @@ enum LogType {
 // ─── İzin Kayıtları ───
 model Leave {
   id              Int         @id @default(autoincrement())
+  company_id       Int?
   user_id         Int
   leave_type      LeaveType   @default(annual)
   start_date      DateTime    @db.Date
@@ -323,7 +358,9 @@ model Leave {
 
   user        User  @relation("LeaveUser", fields: [user_id], references: [id], onDelete: Cascade)
   approved_by User? @relation("LeaveApprover", fields: [approved_by_id], references: [id])
+  company     Company? @relation(fields: [company_id], references: [id])
 
+  @@index([company_id])
   @@index([user_id])
   @@index([start_date, end_date])
   @@map("leaves")
@@ -403,6 +440,7 @@ model NotificationRule {
 // ─── Bildirimler ───
 model Notification {
   id         Int       @id @default(autoincrement())
+  company_id Int?
   user_id    Int
   project_id Int?
   type       String
@@ -415,7 +453,9 @@ model Notification {
 
   user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [project_id], references: [id])
+  company Company? @relation(fields: [company_id], references: [id])
 
+  @@index([company_id])
   @@index([user_id, is_read])
   @@index([created_at])
   @@map("notifications")
@@ -424,6 +464,7 @@ model Notification {
 // ─── Place Order ───
 model ProductionOrder {
   id                Int         @id @default(autoincrement())
+  company_id        Int?
   project_id        Int
   country           CountryTarget
   order_status      OrderStatus @default(pending_approval)
@@ -440,7 +481,9 @@ model ProductionOrder {
   project      Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
   initiated_by User?   @relation("InitiatedBy", fields: [initiated_by_id], references: [id])
   approved_by  User?   @relation("ApprovedBy", fields: [approved_by_id], references: [id])
+  company      Company? @relation(fields: [company_id], references: [id])
 
+  @@index([company_id])
   @@index([project_id])
   @@index([order_status])
   @@map("production_orders")
@@ -460,6 +503,7 @@ enum OrderStatus {
 // ─── Audit Log ───
 model AuditLog {
   id            Int      @id @default(autoincrement())
+  company_id    Int?
   user_id       Int?
   action        String
   resource_type String
@@ -471,7 +515,9 @@ model AuditLog {
   created_at    DateTime @default(now())
 
   user User? @relation(fields: [user_id], references: [id])
+  company Company? @relation(fields: [company_id], references: [id])
 
+  @@index([company_id])
   @@index([user_id])
   @@index([resource_type, resource_id])
   @@index([created_at])
