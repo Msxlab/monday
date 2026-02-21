@@ -2,6 +2,7 @@ import { eventBus, APP_EVENTS } from '../utils/event-bus';
 import { notificationService } from './notification.service';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
+import { escapeHtml } from '../utils/html-escape';
 
 async function getAdminIds(): Promise<number[]> {
   const admins = await prisma.user.findMany({
@@ -25,7 +26,7 @@ export function registerNotificationHandlers() {
         projectId,
         type: 'project_assigned',
         title: 'Yeni Proje Atandı',
-        message: `${njNumber} - ${projectTitle} projesi size atandı.`,
+        message: `${escapeHtml(njNumber)} - ${escapeHtml(projectTitle)} projesi size atandı.`,
         actionUrl: `/admin/projects/${projectId}`,
       });
     } catch (err) {
@@ -48,7 +49,7 @@ export function registerNotificationHandlers() {
           projectId,
           type: 'status_changed',
           title: 'Proje Durumu Değişti',
-          message: `${njNumber} - ${projectTitle}: ${fromStatus} → ${toStatus}`,
+          message: `${escapeHtml(njNumber)} - ${escapeHtml(projectTitle)}: ${escapeHtml(fromStatus)} → ${escapeHtml(toStatus)}`,
           actionUrl: `/admin/projects/${projectId}`,
         });
       }
@@ -63,7 +64,7 @@ export function registerNotificationHandlers() {
             projectId,
             type: 'status_changed',
             title: 'Proje Durumu Değişti',
-            message: `${njNumber} - ${projectTitle}: ${fromStatus} → ${toStatus}`,
+            message: `${escapeHtml(njNumber)} - ${escapeHtml(projectTitle)}: ${escapeHtml(fromStatus)} → ${escapeHtml(toStatus)}`,
             actionUrl: `/admin/projects/${projectId}`,
           });
         }
@@ -88,7 +89,7 @@ export function registerNotificationHandlers() {
           projectId,
           type: 'comment_added',
           title: 'Yeni Yorum',
-          message: `${commenterName}, ${njNumber} - ${projectTitle} projesine yorum ekledi.`,
+          message: `${escapeHtml(commenterName)}, ${escapeHtml(njNumber)} - ${escapeHtml(projectTitle)} projesine yorum ekledi.`,
           actionUrl: `/admin/projects/${projectId}`,
         });
       }
@@ -110,7 +111,7 @@ export function registerNotificationHandlers() {
           userId: adminId,
           type: 'leave_request',
           title: 'Yeni İzin Talebi',
-          message: `${userName} ${startDate} - ${endDate} tarihlerinde ${leaveType} izni talep etti.`,
+          message: `${escapeHtml(userName)} ${escapeHtml(startDate)} - ${escapeHtml(endDate)} tarihlerinde ${escapeHtml(leaveType)} izni talep etti.`,
           actionUrl: '/admin/leaves',
         });
       }
@@ -151,7 +152,7 @@ export function registerNotificationHandlers() {
           userId: adminId,
           type: 'production_order',
           title: 'Yeni Üretim Siparişi',
-          message: `${initiatedByName}, ${njNumber} - ${projectTitle} için üretim siparişi oluşturdu.`,
+          message: `${escapeHtml(initiatedByName)}, ${escapeHtml(njNumber)} - ${escapeHtml(projectTitle)} için üretim siparişi oluşturdu.`,
           actionUrl: '/production/orders',
         });
       }
@@ -174,7 +175,7 @@ export function registerNotificationHandlers() {
           projectId,
           type: 'production_update',
           title: 'Üretim Siparişi Güncellendi',
-          message: `${njNumber} - ${projectTitle} üretim siparişi: ${newStatus}`,
+          message: `${escapeHtml(njNumber)} - ${escapeHtml(projectTitle)} üretim siparişi: ${escapeHtml(newStatus)}`,
           actionUrl: '/production/orders',
         });
       }
@@ -197,7 +198,7 @@ export function registerNotificationHandlers() {
           projectId,
           type: 'revision_requested',
           title: 'Revizyon İstendi',
-          message: `${requestedByName}, ${njNumber} - ${projectTitle} için revizyon talep etti.`,
+          message: `${escapeHtml(requestedByName)}, ${escapeHtml(njNumber)} - ${escapeHtml(projectTitle)} için revizyon talep etti.`,
           actionUrl: `/admin/projects/${projectId}`,
         });
       }
