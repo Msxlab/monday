@@ -52,9 +52,7 @@ export class CompanyService {
       where: { id },
       include: {
         users: {
-          include: {
-            user: { select: { id: true, first_name: true, last_name: true, email: true, role: true } },
-          },
+          select: { id: true, first_name: true, last_name: true, email: true, role: true },
         },
         _count: { select: { projects: true } },
       },
@@ -108,52 +106,44 @@ export class CompanyService {
     if (!company) throw new NotFoundError('Company not found');
     if (!user) throw new NotFoundError('User not found');
 
-    const existing = await prisma.companyUser.findUnique({
-      where: { company_id_user_id: { company_id: companyId, user_id: userId } },
-    });
-    if (existing) throw new AppError('User is already a member of this company', 409);
+    if (user.company_id === companyId) throw new AppError('User is already a member of this company', 409);
 
-    if (isDefault) {
-      await prisma.companyUser.updateMany({
-        where: { user_id: userId, is_default: true },
-        data: { is_default: false },
-      });
-    }
-
-    return prisma.companyUser.create({
-      data: { company_id: companyId, user_id: userId, is_default: isDefault ?? false },
-      include: {
-        user: { select: { id: true, first_name: true, last_name: true, email: true } },
-        company: { select: { id: true, name: true, slug: true } },
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        company_id: companyId,
+        active_company_id: isDefault ? companyId : user.active_company_id,
       },
+      select: { id: true, first_name: true, last_name: true, email: true },
     });
+
+    return { company: { id: company.id, name: company.name, slug: company.slug }, user: updatedUser, is_default: isDefault ?? false };
   }
 
   async removeUser(companyId: number, userId: number) {
-    const membership = await prisma.companyUser.findUnique({
-      where: { company_id_user_id: { company_id: companyId, user_id: userId } },
-    });
-    if (!membership) throw new NotFoundError('User is not a member of this company');
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.company_id !== companyId) throw new NotFoundError('User is not a member of this company');
 
-    await prisma.companyUser.delete({
-      where: { company_id_user_id: { company_id: companyId, user_id: userId } },
+    await prisma.user.update({
+      where: { id: userId },
+      data: { company_id: null, active_company_id: user.active_company_id === companyId ? null : user.active_company_id },
     });
     return { companyId, userId };
   }
 
   async getUserCompanies(userId: number) {
-    const memberships = await prisma.companyUser.findMany({
-      where: { user_id: userId },
-      include: {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        company_id: true,
+        active_company_id: true,
         company: true,
       },
-      orderBy: { created_at: 'desc' },
     });
 
-    return memberships.map((m) => ({
-      ...m.company,
-      is_default: m.is_default,
-    }));
+    if (!user?.company) return [];
+
+    return [{ ...user.company, is_default: user.active_company_id === user.company_id }];
   }
 }
 

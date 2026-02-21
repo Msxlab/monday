@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "deps:check-policy": "bash ./scripts/check-npm-policy.sh",
+    "deps:install": "npm ci",
+    "verify:build-source": "node ./scripts/verify-build-source.mjs",
+    "ci:validate": "npm run deps:install && npm run build && npm run lint && npm run verify:build-source"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

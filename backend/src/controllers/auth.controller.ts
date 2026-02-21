@@ -1,7 +1,21 @@
 import { Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { authService } from '../services/auth.service';
 import { AuthRequest } from '../types';
+
+const authMeUserSelect = {
+  id: true,
+  email: true,
+  first_name: true,
+  last_name: true,
+  role: true,
+  avatar_url: true,
+  timezone: true,
+  country_code: true,
+  company_id: true,
+  active_company_id: true,
+} satisfies Prisma.UserSelect;
 
 const loginSchema = z.object({
   email: z.string().email('Valid email required'),
@@ -105,18 +119,7 @@ export class AuthController {
       const { default: prisma } = await import('../utils/prisma');
       const user = await prisma.user.findUnique({
         where: { id: req.user!.userId },
-        select: {
-          id: true,
-          email: true,
-          first_name: true,
-          last_name: true,
-          role: true,
-          avatar_url: true,
-          timezone: true,
-          country_code: true,
-          company_id: true,
-          active_company_id: true,
-        },
+        select: authMeUserSelect,
       });
 
       res.json({ success: true, data: user });

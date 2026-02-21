@@ -36,6 +36,10 @@ const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 
 export class AuthService {
+  private resolveEffectiveCompanyId(activeCompanyId: number | null, companyId: number | null): number | null {
+    return activeCompanyId ?? companyId ?? null;
+  }
+
   async login(email: string, password: string, ipAddress?: string, userAgent?: string) {
     const user = await prisma.user.findUnique({ where: { email } });
 
@@ -85,7 +89,7 @@ export class AuthService {
       });
     }
 
-    const activeCompanyId = user.active_company_id ?? user.company_id;
+    const activeCompanyId = this.resolveEffectiveCompanyId(user.active_company_id, user.company_id);
     const accessToken = this.generateAccessToken(user, activeCompanyId);
     const refreshToken = this.generateRefreshToken(user, activeCompanyId);
 
@@ -154,7 +158,7 @@ export class AuthService {
 
     await prisma.refreshToken.delete({ where: { id: stored.id } });
 
-    const activeCompanyId = stored.user.active_company_id ?? stored.user.company_id;
+    const activeCompanyId = this.resolveEffectiveCompanyId(stored.user.active_company_id, stored.user.company_id);
     const accessToken = this.generateAccessToken(stored.user, activeCompanyId);
     const newRefreshToken = this.generateRefreshToken(stored.user, activeCompanyId);
 
@@ -447,7 +451,7 @@ export class AuthService {
     return timingSafeEqual(stored, incoming);
   }
 
-  private generateAccessToken(user: { id: number; email: string; role: string }, companyId: number): string {
+  private generateAccessToken(user: { id: number; email: string; role: string }, companyId: number | null): string {
     const secret = process.env.JWT_SECRET!;
     const expiresIn = (process.env.JWT_EXPIRES_IN || '15m') as string & jwt.SignOptions['expiresIn'];
 
@@ -458,7 +462,7 @@ export class AuthService {
     );
   }
 
-  private generateRefreshToken(user: { id: number; email: string; role: string }, companyId: number): string {
+  private generateRefreshToken(user: { id: number; email: string; role: string }, companyId: number | null): string {
     const secret = process.env.JWT_REFRESH_SECRET!;
     const expiresIn = (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as string & jwt.SignOptions['expiresIn'];
 

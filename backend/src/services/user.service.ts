@@ -44,12 +44,12 @@ export class UserService {
 
     const password_hash = await AuthService.hashPassword(data.password);
 
-    let targetCompanyId = companyId;
-    if (!targetCompanyId && createdById) {
+    let targetCompanyId: number | null = companyId ?? null;
+    if (targetCompanyId == null && createdById) {
       const creator = await prisma.user.findUnique({ where: { id: createdById }, select: { active_company_id: true, company_id: true } });
-      targetCompanyId = creator?.active_company_id ?? creator?.company_id;
+      targetCompanyId = creator?.active_company_id ?? creator?.company_id ?? null;
     }
-    if (!targetCompanyId) {
+    if (targetCompanyId == null) {
       throw new AppError('Company context is required to create user', 400);
     }
 

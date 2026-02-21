@@ -34,3 +34,25 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Dependency chain / CI validation
+
+If npm commands return `403 Forbidden`, first run:
+
+```bash
+npm run deps:check-policy
+```
+
+This checks whether the active proxy/policy blocks access to `/-/ping` on the configured npm registry.
+
+For CI/local parity use:
+
+```bash
+npm run ci:validate
+```
+
+To enforce deployment provenance, set these variables in CI (already wired in GitHub Actions workflow):
+
+- `EXPECTED_GIT_SHA`
+- `EXPECTED_GIT_BRANCH`
+- optional `NPM_REGISTRY_URL` (internal mirror)
