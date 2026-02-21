@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import prisma from '../utils/prisma';
 import logger from '../utils/logger';
 import { JwtPayload } from '../types';
@@ -90,7 +91,7 @@ export class AuthService {
 
     await prisma.refreshToken.create({
       data: {
-        token: refreshToken,
+        token_hash: this.hashToken(refreshToken),
         user_id: user.id,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         device_info: parseDeviceInfo(userAgent),
@@ -130,12 +131,13 @@ export class AuthService {
   }
 
   async refresh(refreshTokenStr: string) {
+    const refreshTokenHash = this.hashToken(refreshTokenStr);
     const stored = await prisma.refreshToken.findUnique({
-      where: { token: refreshTokenStr },
+      where: { token_hash: refreshTokenHash },
       include: { user: true },
     });
 
-    if (!stored || stored.expires_at < new Date()) {
+    if (!stored || !this.isTokenHashMatch(stored.token_hash, refreshTokenHash) || stored.expires_at < new Date()) {
       if (stored) {
         await prisma.refreshToken.delete({ where: { id: stored.id } });
       }
@@ -158,7 +160,7 @@ export class AuthService {
 
     await prisma.refreshToken.create({
       data: {
-        token: newRefreshToken,
+        token_hash: this.hashToken(newRefreshToken),
         user_id: stored.user.id,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         device_info: deviceInfo,
@@ -172,8 +174,9 @@ export class AuthService {
 
   async logout(refreshTokenStr: string, userId?: number) {
     try {
+      const tokenHash = this.hashToken(refreshTokenStr);
       await prisma.refreshToken.deleteMany({
-        where: { token: refreshTokenStr },
+        where: { token_hash: tokenHash },
       });
 
       if (userId) {
@@ -244,8 +247,12 @@ export class AuthService {
   }
 
   async revokeOtherSessions(userId: number, currentToken: string) {
+    const currentTokenHash = currentToken ? this.hashToken(currentToken) : null;
     await prisma.refreshToken.deleteMany({
-      where: { user_id: userId, token: { not: currentToken } },
+      where: {
+        user_id: userId,
+        ...(currentTokenHash ? { token_hash: { not: currentTokenHash } } : {}),
+      },
     });
 
     await createAuditLog({
@@ -313,14 +320,14 @@ export class AuthService {
     // Always return success to prevent email enumeration
     if (!user || !user.is_active) return { sent: true };
 
-    const crypto = await import('crypto');
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = randomBytes(32).toString('hex');
+    const resetTokenHash = this.hashToken(resetToken);
     const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        password_reset_token: resetToken,
+        password_reset_token_hash: resetTokenHash,
         password_reset_expires: resetExpiry,
       } as never,
     });
@@ -362,7 +369,7 @@ export class AuthService {
   async resetPasswordWithToken(token: string, newPassword: string) {
     const user = await prisma.user.findFirst({
       where: {
-        password_reset_token: token,
+        password_reset_token_hash: this.hashToken(token),
         password_reset_expires: { gt: new Date() },
       } as never,
     });
@@ -374,7 +381,7 @@ export class AuthService {
       where: { id: user.id },
       data: {
         password_hash: newHash,
-        password_reset_token: null,
+        password_reset_token_hash: null,
         password_reset_expires: null,
       } as never,
     });
@@ -429,7 +436,18 @@ export class AuthService {
     return bcrypt.hash(password, SALT_ROUNDS);
   }
 
-  private generateAccessToken(user: { id: number; email: string; role: string }, companyId: number): string {
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private isTokenHashMatch(storedHash: string, tokenHash: string): boolean {
+    const stored = Buffer.from(storedHash, 'hex');
+    const incoming = Buffer.from(tokenHash, 'hex');
+    if (stored.length !== incoming.length) return false;
+    return timingSafeEqual(stored, incoming);
+  }
+
+  private generateAccessToken(user: { id: number; email: string; role: string }): string {
     const secret = process.env.JWT_SECRET!;
     const expiresIn = (process.env.JWT_EXPIRES_IN || '15m') as string & jwt.SignOptions['expiresIn'];
 
@@ -447,7 +465,7 @@ export class AuthService {
     return jwt.sign(
       { userId: user.id, email: user.email, role: user.role, companyId } as JwtPayload,
       secret,
-      { expiresIn, jwtid: crypto.randomUUID() }
+      { expiresIn, jwtid: randomUUID() }
     );
   }
 }
