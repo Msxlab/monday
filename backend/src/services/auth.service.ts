@@ -67,6 +67,7 @@ export class AuthService {
         resourceType: 'auth',
         ipAddress,
         userAgent,
+        companyId: user.active_company_id ?? user.company_id,
       });
 
       const remaining = MAX_FAILED_ATTEMPTS - newCount;
@@ -84,8 +85,9 @@ export class AuthService {
       });
     }
 
-    const accessToken = this.generateAccessToken(user);
-    const refreshToken = this.generateRefreshToken(user);
+    const activeCompanyId = user.active_company_id ?? user.company_id;
+    const accessToken = this.generateAccessToken(user, activeCompanyId);
+    const refreshToken = this.generateRefreshToken(user, activeCompanyId);
 
     await prisma.refreshToken.create({
       data: {
@@ -109,6 +111,7 @@ export class AuthService {
       resourceType: 'auth',
       ipAddress,
       userAgent,
+      companyId: activeCompanyId,
     });
 
     return {
@@ -118,6 +121,8 @@ export class AuthService {
         first_name: user.first_name,
         last_name: user.last_name,
         role: user.role,
+        company_id: user.company_id,
+        active_company_id: activeCompanyId,
         avatar_url: user.avatar_url,
       },
       accessToken,
@@ -149,8 +154,9 @@ export class AuthService {
 
     await prisma.refreshToken.delete({ where: { id: stored.id } });
 
-    const accessToken = this.generateAccessToken(stored.user);
-    const newRefreshToken = this.generateRefreshToken(stored.user);
+    const activeCompanyId = stored.user.active_company_id ?? stored.user.company_id;
+    const accessToken = this.generateAccessToken(stored.user, activeCompanyId);
+    const newRefreshToken = this.generateRefreshToken(stored.user, activeCompanyId);
 
     await prisma.refreshToken.create({
       data: {
@@ -392,6 +398,40 @@ export class AuthService {
     return { reset: true };
   }
 
+
+  async switchActiveCompany(userId: number, companyId: number) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError('User not found');
+
+    if (user.role !== 'super_admin' && user.company_id !== companyId) {
+      throw new AppError('User cannot switch to this company', 403);
+    }
+
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw new NotFoundError('Company not found');
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { active_company_id: companyId },
+    });
+
+    return {
+      accessToken: this.generateAccessToken(user, companyId),
+      refreshToken: this.generateRefreshToken(user, companyId),
+      company,
+    };
+  }
+
+  async createCompany(name: string, slug: string) {
+    return prisma.company.create({
+      data: { name, slug, status: 'active' },
+    });
+  }
+
+  async listCompanies() {
+    return prisma.company.findMany({ orderBy: { created_at: 'asc' } });
+  }
+
   static async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, SALT_ROUNDS);
   }
@@ -412,18 +452,18 @@ export class AuthService {
     const expiresIn = (process.env.JWT_EXPIRES_IN || '15m') as string & jwt.SignOptions['expiresIn'];
 
     return jwt.sign(
-      { userId: user.id, email: user.email, role: user.role } as JwtPayload,
+      { userId: user.id, email: user.email, role: user.role, companyId } as JwtPayload,
       secret,
       { expiresIn }
     );
   }
 
-  private generateRefreshToken(user: { id: number; email: string; role: string }): string {
+  private generateRefreshToken(user: { id: number; email: string; role: string }, companyId: number): string {
     const secret = process.env.JWT_REFRESH_SECRET!;
     const expiresIn = (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as string & jwt.SignOptions['expiresIn'];
 
     return jwt.sign(
-      { userId: user.id, email: user.email, role: user.role } as JwtPayload,
+      { userId: user.id, email: user.email, role: user.role, companyId } as JwtPayload,
       secret,
       { expiresIn, jwtid: randomUUID() }
     );

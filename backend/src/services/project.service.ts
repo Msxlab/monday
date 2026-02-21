@@ -59,7 +59,7 @@ const VALID_STATUS_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
 
 export class ProjectService {
   async create(data: CreateProjectDto, createdById: number, userRole: UserRole) {
-    const existing = await prisma.project.findUnique({
+    const existing = await prisma.project.findFirst({
       where: { nj_number: data.nj_number },
     });
     if (existing) {
@@ -450,7 +450,7 @@ export class ProjectService {
     const source = await prisma.project.findUnique({ where: { id } });
     if (!source) throw new NotFoundError('Project not found');
 
-    const existing = await prisma.project.findUnique({ where: { nj_number: newNjNumber } });
+    const existing = await prisma.project.findFirst({ where: { nj_number: newNjNumber } });
     if (existing) throw new AppError('NJ number already exists', 409);
 
     const cloned = await prisma.$transaction(async (tx) => {

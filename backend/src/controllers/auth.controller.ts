@@ -15,6 +15,15 @@ const passwordSchema = z.string()
   .regex(/[0-9]/, 'Password must contain at least one number')
   .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
 
+const switchCompanySchema = z.object({
+  companyId: z.number().int().positive(),
+});
+
+const createCompanySchema = z.object({
+  name: z.string().min(2),
+  slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+});
+
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: passwordSchema,
@@ -105,10 +114,51 @@ export class AuthController {
           avatar_url: true,
           timezone: true,
           country_code: true,
+          company_id: true,
+          active_company_id: true,
         },
       });
 
       res.json({ success: true, data: user });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+
+  async listCompanies(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const companies = await authService.listCompanies();
+      res.json({ success: true, data: companies });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async switchCompany(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { companyId } = switchCompanySchema.parse(req.body);
+      const result = await authService.switchActiveCompany(req.user!.userId, companyId);
+
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/api/auth/refresh',
+      });
+
+      res.json({ success: true, data: { accessToken: result.accessToken, company: result.company } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createCompany(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { name, slug } = createCompanySchema.parse(req.body);
+      const company = await authService.createCompany(name, slug);
+      res.status(201).json({ success: true, data: company });
     } catch (error) {
       next(error);
     }

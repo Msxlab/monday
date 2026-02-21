@@ -11,6 +11,9 @@ router.post('/forgot-password', (req, res, next) => authController.forgotPasswor
 router.post('/reset-password', (req, res, next) => authController.resetPassword(req, res, next));
 router.post('/logout', authenticate, (req, res, next) => authController.logout(req, res, next));
 router.get('/me', authenticate, (req, res, next) => authController.me(req, res, next));
+router.get('/companies', authenticate, (req, res, next) => authController.listCompanies(req, res, next));
+router.post('/switch-company', authenticate, authorize('super_admin', 'admin'), (req, res, next) => authController.switchCompany(req, res, next));
+router.post('/companies', authenticate, authorize('super_admin'), (req, res, next) => authController.createCompany(req, res, next));
 router.post('/change-password', authenticate, (req, res, next) => authController.changePassword(req, res, next));
 
 router.get('/sessions', authenticate, (req, res, next) => authController.getSessions(req, res, next));
