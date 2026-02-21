@@ -8,6 +8,23 @@ import logger from './utils/logger';
 async function seed() {
   logger.info('Seeding database...');
 
+  const companies = [
+    { name: 'Northwind Studio', slug: 'northwind-studio' },
+    { name: 'Anatolia Design', slug: 'anatolia-design' },
+    { name: 'Bluepeak Manufacturing', slug: 'bluepeak-manufacturing' },
+  ];
+
+  for (const company of companies) {
+    await prisma.company.upsert({
+      where: { slug: company.slug },
+      update: { name: company.name, status: 'active' },
+      create: { ...company, status: 'active' },
+    });
+  }
+
+  const defaultCompany = await prisma.company.findUnique({ where: { slug: companies[0].slug } });
+  if (!defaultCompany) throw new Error('Default company missing after seed');
+
   const existingAdmin = await prisma.user.findUnique({
     where: { email: 'admin@designertracker.com' },
   });
@@ -17,6 +34,8 @@ async function seed() {
 
     await prisma.user.create({
       data: {
+        company_id: defaultCompany.id,
+        active_company_id: defaultCompany.id,
         email: 'admin@designertracker.com',
         password_hash: passwordHash,
         first_name: 'Super',
@@ -29,10 +48,16 @@ async function seed() {
 
     logger.info('Super admin created: admin@designertracker.com / Admin@123456');
   } else {
-    logger.info('Super admin already exists, skipping...');
+    await prisma.user.update({
+      where: { id: existingAdmin.id },
+      data: {
+        company_id: existingAdmin.company_id ?? defaultCompany.id,
+        active_company_id: existingAdmin.active_company_id ?? existingAdmin.company_id ?? defaultCompany.id,
+      },
+    });
+    logger.info('Super admin already exists, tenant fields ensured');
   }
 
-  // Global work schedule
   const globalSchedule = await prisma.workSchedule.findFirst({
     where: { user_id: null },
   });

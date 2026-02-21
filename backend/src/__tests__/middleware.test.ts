@@ -1,5 +1,8 @@
 import request from 'supertest';
 import { createTestApp } from './setup';
+import { authorizeAction } from '../middleware/authorize';
+import prisma from '../utils/prisma';
+import { ForbiddenError } from '../utils/errors';
 
 const app = createTestApp();
 
@@ -65,5 +68,59 @@ describe('Health Check', () => {
     expect(res.body.database).toBe('ok');
     expect(res.body.uptime).toBeDefined();
     expect(res.body.memory).toBeDefined();
+  });
+});
+
+
+describe('authorizeAction regression tests', () => {
+  const next = jest.fn();
+  const req = {
+    user: { userId: 101, role: 'designer', email: 'designer@example.com' },
+  } as any;
+
+  beforeEach(() => {
+    next.mockReset();
+    jest.spyOn(prisma.permissionOverride, 'findUnique').mockResolvedValue(null as never);
+    jest.spyOn(prisma.userPermissionOverride, 'findUnique').mockResolvedValue(null as never);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should deny delete action when role override only has can_edit', async () => {
+    jest.spyOn(prisma.permissionOverride, 'findUnique').mockResolvedValue({ can_view: true, can_edit: true, can_delete: false } as never);
+
+    const middleware = authorizeAction('delete', 'project', ['admin']);
+    await middleware(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+  });
+
+  it('should allow action with active user override even if role override denies', async () => {
+    jest.spyOn(prisma.permissionOverride, 'findUnique').mockResolvedValue({ can_view: false, can_edit: false, can_delete: false } as never);
+    jest.spyOn(prisma.userPermissionOverride, 'findUnique').mockResolvedValue({
+      can_view: true,
+      can_edit: false,
+      expires_at: new Date(Date.now() + 60_000),
+    } as never);
+
+    const middleware = authorizeAction('export_csv', 'project', ['admin']);
+    await middleware(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('should ignore expired user override and fall back to default role check', async () => {
+    jest.spyOn(prisma.userPermissionOverride, 'findUnique').mockResolvedValue({
+      can_view: true,
+      can_edit: true,
+      expires_at: new Date(Date.now() - 60_000),
+    } as never);
+
+    const middleware = authorizeAction('view', 'project', ['admin']);
+    await middleware(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
   });
 });

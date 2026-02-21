@@ -113,20 +113,43 @@ new -> designing -> review -> approved -> in_production -> done
 ```
 monday/
 ├── backend/
-│   ├── prisma/schema.prisma       # Veritabani semasi
+│   ├── prisma/schema.prisma
 │   ├── src/
-│   │   ├── controllers/           # Route handler'lar
-│   │   ├── services/              # Is mantigi
-│   │   ├── middleware/            # Auth, permission, validation
-│   │   ├── routes/                # Express router
-│   │   ├── utils/                 # Logger, Prisma, errors, permissions, audit
-│   │   ├── types/                 # TypeScript tipleri
-│   │   ├── seed.ts                # DB seed (super admin)
-│   │   └── index.ts               # Entry point
-│   ├── .env                       # Cevre degiskenleri
+│   │   ├── controllers/
+│   │   ├── middleware/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   ├── __tests__/
+│   │   ├── seed.ts
+│   │   └── index.ts
 │   └── package.json
-├── frontend/                      # Planned/in-progress (su anda bos)
-├── .windsurfrules                 # Gelistirme kurallari
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── login/page.tsx
+│   │   │   ├── admin/page.tsx
+│   │   │   ├── projects/page.tsx
+│   │   │   ├── users/page.tsx
+│   │   │   └── settings/page.tsx
+│   │   ├── components/
+│   │   │   ├── layout/
+│   │   │   │   ├── app-shell.tsx
+│   │   │   │   ├── auth-guard.tsx
+│   │   │   │   ├── sidebar.tsx
+│   │   │   │   ├── topbar.tsx
+│   │   │   │   └── api-status-card.tsx
+│   │   │   └── ui/
+│   │   ├── config/routes.ts
+│   │   └── lib/utils.ts
+│   ├── components.json
+│   ├── next.config.ts
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   └── package.json
+├── .windsurfrules
 └── DESIGNER_TRACKER_SYSTEM_PLAN.md
 ```
 

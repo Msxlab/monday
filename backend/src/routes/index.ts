@@ -18,6 +18,9 @@ import mondayRoutes from './monday.routes';
 import pushRoutes from './push.routes';
 import tagRoutes from './tag.routes';
 import subtaskRoutes from './subtask.routes';
+import aiRoutes from './ai.routes';
+import telegramWebhookRoutes from './telegram-webhook.routes';
+import whatsappProviderRoutes from './whatsapp-provider.routes';
 
 const router = Router();
 
@@ -40,6 +43,9 @@ router.use('/monday', mondayRoutes);
 router.use('/push', pushRoutes);
 router.use('/tags', tagRoutes);
 router.use('/subtasks', subtaskRoutes);
+router.use('/ai', aiRoutes);
+router.use('/integrations/telegram-webhook', telegramWebhookRoutes);
+router.use('/integrations/whatsapp-provider', whatsappProviderRoutes);
 
 router.get('/health', async (_req, res) => {
   const memUsage = process.memoryUsage();
