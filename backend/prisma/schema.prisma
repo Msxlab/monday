@@ -23,7 +23,7 @@ model User {
   skills             String?   @db.Text
   failed_login_count      Int       @default(0)
   locked_until            DateTime?
-  password_reset_token    String?   @db.VarChar(255)
+  password_reset_token_hash String? @db.Char(64)
   password_reset_expires  DateTime?
   notification_preferences String?  @db.Text
   created_at              DateTime  @default(now())
@@ -67,7 +67,7 @@ enum UserRole {
 
 model RefreshToken {
   id          Int      @id @default(autoincrement())
-  token       String   @unique @db.VarChar(500)
+  token_hash  String   @unique @db.Char(64)
   user_id     Int
   expires_at  DateTime
   device_info String?  @db.VarChar(500)
