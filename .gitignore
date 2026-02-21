@@ -8,3 +8,4 @@ uploads/
 out/
 coverage/
 .turbo/
+frontend_backup_tmp/
