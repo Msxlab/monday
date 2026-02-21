@@ -23,10 +23,17 @@ export function ChatPanel() {
     },
   ])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const pendingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  useEffect(() => {
+    return () => {
+      if (pendingTimeout.current) clearTimeout(pendingTimeout.current)
+    }
+  }, [])
 
   const handleSend = () => {
     if (!input.trim()) return
@@ -40,14 +47,17 @@ export function ChatPanel() {
     setInput("")
 
     // Simulated AI response
-    setTimeout(() => {
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "ai",
-        content: "Talebinizi aldım. Bu özellik yakında aktif olacak. Şimdilik size başka nasıl yardımcı olabilirim?",
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, aiMsg])
+    if (pendingTimeout.current) clearTimeout(pendingTimeout.current)
+    pendingTimeout.current = setTimeout(() => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "ai" as const,
+          content: "Talebinizi aldım. Bu özellik yakında aktif olacak. Şimdilik size başka nasıl yardımcı olabilirim?",
+          timestamp: new Date(),
+        },
+      ])
     }, 1000)
   }
 

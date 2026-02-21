@@ -1,4 +1,4 @@
-import axios from "axios"
+import axios, { type InternalAxiosRequestConfig } from "axios"
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api",
@@ -21,12 +21,14 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+const retriedRequests = new WeakSet<InternalAxiosRequestConfig>()
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
+    const originalRequest = error.config as InternalAxiosRequestConfig
+    if (error.response?.status === 401 && !retriedRequests.has(originalRequest)) {
+      retriedRequests.add(originalRequest)
       try {
         const refreshToken = localStorage.getItem("refreshToken")
         if (refreshToken) {
