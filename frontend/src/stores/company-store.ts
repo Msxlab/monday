@@ -14,12 +14,8 @@ interface CompanyState {
 }
 
 export const useCompanyStore = create<CompanyState>((set) => ({
-  companies: [
-    { id: "1", name: "Şirket A" },
-    { id: "2", name: "Şirket B" },
-    { id: "3", name: "Şirket C" },
-  ],
-  selectedCompany: { id: "1", name: "Şirket A" },
+  companies: [],
+  selectedCompany: null,
 
   setCompanies: (companies: Company[]) => set({ companies }),
 

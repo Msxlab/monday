@@ -23,19 +23,12 @@ export function ChatPanel() {
     },
   ])
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const pendingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  useEffect(() => {
-    return () => {
-      if (pendingTimeout.current) clearTimeout(pendingTimeout.current)
-    }
-  }, [])
-
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -44,21 +37,37 @@ export function ChatPanel() {
       timestamp: new Date(),
     }
     setMessages((prev) => [...prev, userMsg])
+    const messageText = input.trim()
     setInput("")
 
-    // Simulated AI response
-    if (pendingTimeout.current) clearTimeout(pendingTimeout.current)
-    pendingTimeout.current = setTimeout(() => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api"}/ai-chat/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: messageText }),
+      })
+      const data = await res.json()
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           role: "ai" as const,
-          content: "Talebinizi aldım. Bu özellik yakında aktif olacak. Şimdilik size başka nasıl yardımcı olabilirim?",
+          content: data.data?.response || data.response || "Yanıt alınamadı. Lütfen tekrar deneyin.",
           timestamp: new Date(),
         },
       ])
-    }, 1000)
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "ai" as const,
+          content: "Bağlantı hatası. Backend sunucusuna ulaşılamıyor.",
+          timestamp: new Date(),
+        },
+      ])
+    }
   }
 
   return (

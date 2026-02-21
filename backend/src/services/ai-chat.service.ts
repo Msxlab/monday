@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma';
+import { escapeHtml } from '../utils/html-escape';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -76,7 +77,7 @@ export class AiChatService {
     }
 
     const projectList = projects
-      .map((p) => `• ${p.nj_number} - ${p.title} (Durum: ${p.status}, Öncelik: ${p.priority})`)
+      .map((p) => `• ${escapeHtml(p.nj_number)} - ${escapeHtml(p.title)} (Durum: ${p.status}, Öncelik: ${p.priority})`)
       .join('\n');
 
     return `Toplam ${total} proje bulundu${projects.length < total ? ` (ilk ${projects.length} gösteriliyor)` : ''}:\n\n${projectList}`;
@@ -97,7 +98,7 @@ export class AiChatService {
       });
 
       if (onLeave.length === 0) return 'Bugün izinli olan kimse yok.';
-      const names = onLeave.map((l) => `• ${l.user.first_name} ${l.user.last_name} (${l.leave_type})`).join('\n');
+      const names = onLeave.map((l) => `• ${escapeHtml(l.user.first_name)} ${escapeHtml(l.user.last_name)} (${l.leave_type})`).join('\n');
       return `Bugün ${onLeave.length} kişi izinli:\n\n${names}`;
     }
 
@@ -126,7 +127,7 @@ export class AiChatService {
     const roleGroups: Record<string, string[]> = {};
     for (const u of users) {
       if (!roleGroups[u.role]) roleGroups[u.role] = [];
-      roleGroups[u.role].push(`${u.first_name} ${u.last_name}`);
+      roleGroups[u.role].push(`${escapeHtml(u.first_name)} ${escapeHtml(u.last_name)}`);
     }
 
     const lines = Object.entries(roleGroups)
