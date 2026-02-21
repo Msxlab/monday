@@ -13,7 +13,10 @@ Tasarim ekibinin proje takibini, performans analizini ve is yuku yonetimini tek 
 - **Validation:** Zod
 - **Logging:** Winston
 
-### Frontend
+### Frontend (Durum: planned / in-progress)
+> Bu repoda su anda calisir bir frontend implementasyonu yoktur. `frontend/` klasoru mevcut ancak kaynak kod bulunmamaktadir.
+
+Planlanan teknoloji secimleri:
 - **Framework:** Next.js 14 (App Router)
 - **UI:** Tailwind CSS + shadcn/ui
 - **State:** Zustand
@@ -31,8 +34,8 @@ cp .env.example .env
 # .env dosyasini duzenleyin (DATABASE_URL, JWT secrets vb.)
 
 npm install
-npx prisma generate
-npx prisma migrate dev --name init
+npm run prisma:generate
+npm run prisma:migrate
 npm run dev
 ```
 
@@ -42,7 +45,7 @@ Backend `http://localhost:5000` adresinde calisir.
 
 ```bash
 cd backend
-npx ts-node-dev src/seed.ts
+npx ts-node-dev --transpile-only src/seed.ts
 ```
 
 Varsayilan giris bilgileri:
@@ -51,41 +54,32 @@ Varsayilan giris bilgileri:
 
 ### 3. Frontend
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+Frontend uygulamasi henuz bu repoda yoktur (planned / in-progress). Bu nedenle calistirilabilir bir frontend kurulum komutu bulunmamaktadir.
 
-Frontend `http://localhost:3000` adresinde calisir.
+## Mevcut Endpoint Listesi (`/api` alti)
 
-## API Endpoints
+`backend/src/routes/index.ts` ile birebir uyumlu route prefix listesi:
 
-### Auth
-- `POST /api/auth/login` — Giris
-- `POST /api/auth/refresh` — Token yenileme
-- `POST /api/auth/logout` — Cikis
-- `GET /api/auth/me` — Mevcut kullanici bilgisi
-- `POST /api/auth/change-password` — Sifre degistirme
-
-### Users
-- `GET /api/users` — Kullanici listesi (admin)
-- `POST /api/users` — Kullanici olusturma (admin)
-- `GET /api/users/:id` — Kullanici detay (admin)
-- `PATCH /api/users/:id` — Kullanici guncelleme (admin)
-- `POST /api/users/:id/reset-password` — Sifre sifirlama (admin)
-- `GET /api/users/designers` — Tasarimci listesi
-
-### Projects
-- `GET /api/projects` — Proje listesi
-- `POST /api/projects` — Proje olusturma (admin)
-- `GET /api/projects/:id` — Proje detay
-- `PATCH /api/projects/:id` — Proje guncelleme
-- `PATCH /api/projects/:id/status` — Durum degistirme
-- `GET /api/projects/stats` — Proje istatistikleri (admin)
-
-### Health
-- `GET /api/health` — API durum kontrolu
+- `/api/auth`
+- `/api/users`
+- `/api/projects`
+- `/api/leaves`
+- `/api/notifications`
+- `/api/production-orders`
+- `/api/analytics`
+- `/api/settings`
+- `/api/audit-logs`
+- `/api/finance`
+- `/api/daily-logs`
+- `/api/comments`
+- `/api/uploads`
+- `/api/user-permissions`
+- `/api/role-upgrades`
+- `/api/monday`
+- `/api/push`
+- `/api/tags`
+- `/api/subtasks`
+- `/api/health`
 
 ## Kullanici Rolleri
 
@@ -106,6 +100,13 @@ new -> designing -> review -> approved -> in_production -> done
             |
          designing (tekrar)
 ```
+
+## Eksik Moduller / Roadmap
+
+- **UI (Frontend Uygulamasi):** Login, dashboard, rol bazli ekranlar ve ortak component sistemi implementasyonu.
+- **Multi-tenant:** Tenant izolasyonu, tenant bazli yetkilendirme ve tenant onboarding akisi.
+- **AI Assistant:** Gorev/yorum ozetleme, onceliklendirme yardimi ve operasyonel copilot senaryolari.
+- **Theme System:** Acik/koyu tema, brand bazli tema tokenlari ve merkezi tema konfigrasyonu.
 
 ## Klasor Yapisi
 
@@ -150,4 +151,14 @@ monday/
 │   └── package.json
 ├── .windsurfrules
 └── DESIGNER_TRACKER_SYSTEM_PLAN.md
+```
+
+## Deploy (Backend)
+
+```bash
+cd backend
+npm install
+npm run build
+npm run prisma:deploy
+npm run start
 ```
