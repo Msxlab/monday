@@ -13,6 +13,7 @@ import logger from './utils/logger';
 import prisma from './utils/prisma';
 import { initScheduler } from './jobs/scheduler';
 import { registerNotificationHandlers } from './services/notification-handler';
+import { tenantContextMiddleware } from './middleware/tenant-context';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '5000', 10);
@@ -48,7 +49,7 @@ app.use(cookieParser());
 app.use('/uploads/avatars', express.static(path.join(__dirname, '..', 'uploads', 'avatars')));
 
 // API routes
-app.use('/api', apiRoutes);
+app.use('/api', tenantContextMiddleware, apiRoutes);
 
 // Error handler
 app.use(errorHandler);

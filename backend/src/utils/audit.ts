@@ -3,6 +3,7 @@ import logger from './logger';
 
 interface AuditParams {
   userId?: number;
+  companyId?: number;
   action: string;
   resourceType: string;
   resourceId?: number;
@@ -14,8 +15,20 @@ interface AuditParams {
 
 export async function createAuditLog(params: AuditParams): Promise<void> {
   try {
+    let companyId = params.companyId;
+    if (!companyId && params.userId) {
+      const user = await prisma.user.findUnique({ where: { id: params.userId }, select: { active_company_id: true, company_id: true } });
+      companyId = user?.active_company_id ?? user?.company_id;
+    }
+
+    if (!companyId) {
+      logger.warn('Skipping audit log without tenant context', { params });
+      return;
+    }
+
     await prisma.auditLog.create({
       data: {
+        company_id: companyId,
         user_id: params.userId,
         action: params.action,
         resource_type: params.resourceType,
