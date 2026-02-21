@@ -7,6 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Şirketler (Companies / Multi-Tenant) ───
+model Company {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  slug        String   @unique
+  logo_url    String?
+  address     String?  @db.Text
+  phone       String?
+  email       String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  users       CompanyUser[]
+  projects    Project[]
+
+  @@map("companies")
+}
+
+model CompanyUser {
+  id         Int      @id @default(autoincrement())
+  company_id Int
+  user_id    Int
+  is_default Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  company Company @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([company_id, user_id])
+  @@index([user_id])
+  @@map("company_users")
+}
+
 // ─── Kullanıcılar ───
 model User {
   id            Int       @id @default(autoincrement())
@@ -53,6 +87,7 @@ model User {
   reviewed_upgrades        RoleUpgradeRequest[]      @relation("UpgradeReviewer")
   push_subscriptions       PushSubscription[]
   subtask_assignments      ProjectSubtask[]          @relation("SubtaskAssignee")
+  company_memberships      CompanyUser[]
 
   @@map("users")
 }
@@ -101,11 +136,13 @@ model Project {
   monday_item_id        String?
   monday_board_id       String?
   created_by_id         Int?
+  company_id            Int?
   created_at            DateTime      @default(now())
   updated_at            DateTime      @updatedAt
 
   assigned_designer User?                  @relation("AssignedDesigner", fields: [assigned_designer_id], references: [id])
   created_by        User?                  @relation("CreatedBy", fields: [created_by_id], references: [id])
+  company           Company?               @relation(fields: [company_id], references: [id])
   financials        ProjectFinancial?
   client            ProjectClient?
   revisions         ProjectRevision[]
@@ -124,6 +161,7 @@ model Project {
   @@index([status])
   @@index([created_at])
   @@index([deadline])
+  @@index([company_id])
   @@map("projects")
 }
 
