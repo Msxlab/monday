@@ -1,0 +1,46 @@
+name: frontend-ci
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+
+jobs:
+  validate-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      EXPECTED_GIT_SHA: ${{ github.sha }}
+      EXPECTED_GIT_BRANCH: ${{ github.ref_name }}
+      NPM_REGISTRY_URL: ${{ vars.NPM_REGISTRY_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check npm registry policy/proxy
+        run: npm run deps:check-policy
+
+      - name: Install dependencies
+        run: npm run deps:install
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Verify build source branch/commit
+        run: npm run verify:build-source
