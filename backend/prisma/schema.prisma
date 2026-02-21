@@ -132,11 +132,13 @@ model Project {
   monday_item_id        String?
   monday_board_id       String?
   created_by_id         Int?
+  company_id            Int?
   created_at            DateTime      @default(now())
   updated_at            DateTime      @updatedAt
 
   assigned_designer User?                  @relation("AssignedDesigner", fields: [assigned_designer_id], references: [id])
   created_by        User?                  @relation("CreatedBy", fields: [created_by_id], references: [id])
+  company           Company?               @relation(fields: [company_id], references: [id])
   financials        ProjectFinancial?
   client            ProjectClient?
   revisions         ProjectRevision[]
@@ -158,6 +160,7 @@ model Project {
   @@index([status])
   @@index([created_at])
   @@index([deadline])
+  @@index([company_id])
   @@map("projects")
 }
 
