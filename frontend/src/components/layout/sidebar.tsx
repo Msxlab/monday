@@ -2,11 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { sidebarMenu } from '@/config/routes';
+import { getVisibleSidebarMenu } from '@/config/routes';
+import { useAuthStore } from '@/lib/auth-store';
 import { cn } from '@/lib/utils';
 
 export function Sidebar() {
   const pathname = usePathname();
+  const role = useAuthStore((state) => state.user?.role);
+  const sidebarMenu = getVisibleSidebarMenu(role);
 
   return (
     <aside className="w-72 border-r border-border/60 bg-gradient-to-b from-slate-50 to-white p-4 dark:from-slate-950 dark:to-slate-900">
