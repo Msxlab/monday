@@ -132,7 +132,6 @@ model Project {
   monday_item_id        String?
   monday_board_id       String?
   created_by_id         Int?
-  company_id            Int?
   created_at            DateTime      @default(now())
   updated_at            DateTime      @updatedAt
 
@@ -151,7 +150,6 @@ model Project {
   attachments       ProjectAttachment[]
   tag_assignments   ProjectTagAssignment[]
   subtasks          ProjectSubtask[]
-  company           Company?         @relation(fields: [company_id], references: [id])
 
   @@unique([company_id, nj_number])
   @@index([company_id])
@@ -160,7 +158,6 @@ model Project {
   @@index([status])
   @@index([created_at])
   @@index([deadline])
-  @@index([company_id])
   @@map("projects")
 }
 

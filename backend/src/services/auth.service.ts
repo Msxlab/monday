@@ -447,7 +447,7 @@ export class AuthService {
     return timingSafeEqual(stored, incoming);
   }
 
-  private generateAccessToken(user: { id: number; email: string; role: string }): string {
+  private generateAccessToken(user: { id: number; email: string; role: string }, companyId: number): string {
     const secret = process.env.JWT_SECRET!;
     const expiresIn = (process.env.JWT_EXPIRES_IN || '15m') as string & jwt.SignOptions['expiresIn'];
 
