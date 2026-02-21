@@ -2,6 +2,7 @@ import { OrderStatus, CountryTarget } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { AppError, NotFoundError } from '../utils/errors';
 import { createAuditLog } from '../utils/audit';
+import { eventBus, APP_EVENTS } from '../utils/event-bus';
 
 interface CreateOrderDto {
   project_id: number;
@@ -58,6 +59,14 @@ export class ProductionService {
       newValue: { project_id: data.project_id, country: data.country },
     });
 
+    const initiator = order.initiated_by;
+    eventBus.emitEvent(APP_EVENTS.PRODUCTION_ORDER_CREATED, {
+      orderId: order.id,
+      projectTitle: order.project.title,
+      njNumber: order.project.nj_number,
+      initiatedByName: initiator ? `${initiator.first_name} ${initiator.last_name}` : 'System',
+    });
+
     return order;
   }
 
@@ -104,9 +113,30 @@ export class ProductionService {
     return order;
   }
 
+  private static VALID_TRANSITIONS: Record<string, string[]> = {
+    pending_approval: ['approved', 'rejected'],
+    approved: ['ordered', 'rejected'],
+    ordered: ['shipped', 'rejected'],
+    shipped: ['in_customs', 'delivered'],
+    in_customs: ['delivered'],
+    delivered: [],
+    rejected: [],
+    rework: ['ordered', 'rejected'],
+  };
+
   async update(id: number, data: UpdateOrderDto, userId: number) {
     const order = await prisma.productionOrder.findUnique({ where: { id } });
     if (!order) throw new NotFoundError('Production order not found');
+
+    if (data.order_status) {
+      const allowed = ProductionService.VALID_TRANSITIONS[order.order_status] || [];
+      if (!allowed.includes(data.order_status)) {
+        throw new AppError(
+          `Invalid status transition: ${order.order_status} → ${data.order_status}. Allowed: ${allowed.join(', ') || 'none'}`,
+          400
+        );
+      }
+    }
 
     const updateData: Record<string, unknown> = { ...data };
 
@@ -153,7 +183,42 @@ export class ProductionService {
       newValue: data,
     });
 
+    if (data.order_status) {
+      const project = await prisma.project.findUnique({
+        where: { id: order.project_id },
+        select: { title: true, nj_number: true, assigned_designer_id: true },
+      });
+      eventBus.emitEvent(APP_EVENTS.PRODUCTION_ORDER_UPDATED, {
+        orderId: id,
+        projectId: order.project_id,
+        newStatus: data.order_status,
+        projectTitle: project?.title ?? '',
+        njNumber: project?.nj_number ?? '',
+        designerId: project?.assigned_designer_id ?? null,
+      });
+    }
+
     return updated;
+  }
+
+  async delete(id: number, userId: number) {
+    const order = await prisma.productionOrder.findUnique({ where: { id } });
+    if (!order) throw new NotFoundError('Production order not found');
+    if (order.order_status === 'delivered') {
+      throw new AppError('Teslim edilmiş sipariş silinemez', 400);
+    }
+
+    await prisma.productionOrder.delete({ where: { id } });
+
+    await createAuditLog({
+      userId,
+      action: 'production_order_deleted',
+      resourceType: 'production_order',
+      resourceId: id,
+      oldValue: { project_id: order.project_id, status: order.order_status },
+    });
+
+    return { id };
   }
 
   async getStats() {

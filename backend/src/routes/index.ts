@@ -14,6 +14,10 @@ import commentRoutes from './comment.routes';
 import uploadRoutes from './upload.routes';
 import userPermissionRoutes from './user-permission.routes';
 import roleUpgradeRoutes from './role-upgrade.routes';
+import mondayRoutes from './monday.routes';
+import pushRoutes from './push.routes';
+import tagRoutes from './tag.routes';
+import subtaskRoutes from './subtask.routes';
 
 const router = Router();
 
@@ -32,9 +36,34 @@ router.use('/comments', commentRoutes);
 router.use('/uploads', uploadRoutes);
 router.use('/user-permissions', userPermissionRoutes);
 router.use('/role-upgrades', roleUpgradeRoutes);
+router.use('/monday', mondayRoutes);
+router.use('/push', pushRoutes);
+router.use('/tags', tagRoutes);
+router.use('/subtasks', subtaskRoutes);
 
-router.get('/health', (_req, res) => {
-  res.json({ success: true, message: 'Designer Tracker API is running', timestamp: new Date().toISOString() });
+router.get('/health', async (_req, res) => {
+  const memUsage = process.memoryUsage();
+  let dbStatus = 'ok';
+  try {
+    const { default: prisma } = await import('../utils/prisma');
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    dbStatus = 'error';
+  }
+
+  const status = dbStatus === 'ok' ? 200 : 503;
+  res.status(status).json({
+    success: dbStatus === 'ok',
+    message: 'Designer Tracker API',
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+    database: dbStatus,
+    memory: {
+      rss: Math.round(memUsage.rss / 1024 / 1024),
+      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+    },
+  });
 });
 
 export default router;

@@ -1,6 +1,8 @@
 import { UserRole } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { AppError, ForbiddenError, NotFoundError } from '../utils/errors';
+import { eventBus, APP_EVENTS } from '../utils/event-bus';
+import { createAuditLog } from '../utils/audit';
 
 interface CreateCommentDto {
   project_id: number;
@@ -23,7 +25,7 @@ export class CommentService {
       }
     }
 
-    return prisma.projectComment.create({
+    const comment = await prisma.projectComment.create({
       data: {
         project_id: data.project_id,
         user_id: userId,
@@ -34,6 +36,25 @@ export class CommentService {
         user: { select: { id: true, first_name: true, last_name: true, role: true, avatar_url: true } },
       },
     });
+
+    await createAuditLog({
+      userId,
+      action: 'comment_created',
+      resourceType: 'project_comment',
+      resourceId: comment.id,
+      newValue: { project_id: data.project_id, content_length: data.content.length },
+    });
+
+    eventBus.emitEvent(APP_EVENTS.COMMENT_CREATED, {
+      projectId: data.project_id,
+      commenterId: userId,
+      commenterName: `${comment.user.first_name} ${comment.user.last_name}`,
+      projectTitle: project.title,
+      njNumber: project.nj_number,
+      designerId: project.assigned_designer_id,
+    });
+
+    return comment;
   }
 
   async listByProject(projectId: number, userRole: UserRole, userId: number, page = 1, limit = 50) {
@@ -78,6 +99,33 @@ export class CommentService {
     };
   }
 
+  async update(commentId: number, content: string, userId: number, userRole: UserRole) {
+    const comment = await prisma.projectComment.findUnique({ where: { id: commentId } });
+    if (!comment) throw new NotFoundError('Comment not found');
+
+    const isAdmin = ['super_admin', 'admin'].includes(userRole);
+    if (!isAdmin && comment.user_id !== userId) {
+      throw new AppError('You can only edit your own comments', 403);
+    }
+
+    const updated = await prisma.projectComment.update({
+      where: { id: commentId },
+      data: { content },
+      include: {
+        user: { select: { id: true, first_name: true, last_name: true, role: true, avatar_url: true } },
+      },
+    });
+
+    await createAuditLog({
+      userId,
+      action: 'comment_updated',
+      resourceType: 'project_comment',
+      resourceId: commentId,
+    });
+
+    return updated;
+  }
+
   async delete(commentId: number, userId: number, userRole: UserRole) {
     const comment = await prisma.projectComment.findUnique({ where: { id: commentId } });
     if (!comment) throw new NotFoundError('Comment not found');
@@ -88,6 +136,14 @@ export class CommentService {
     }
 
     await prisma.projectComment.delete({ where: { id: commentId } });
+
+    await createAuditLog({
+      userId,
+      action: 'comment_deleted',
+      resourceType: 'project_comment',
+      resourceId: commentId,
+    });
+
     return { deleted: true };
   }
 }

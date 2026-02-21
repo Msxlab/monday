@@ -8,6 +8,7 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin'));
 
+router.get('/list', financeController.listAll.bind(financeController));
 router.get('/summary', financeController.getSummary.bind(financeController));
 router.get('/project/:projectId', financeController.getByProjectId.bind(financeController));
 router.put('/', financeController.upsert.bind(financeController));

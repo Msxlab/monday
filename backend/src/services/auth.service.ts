@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import { JwtPayload } from '../types';
 import { UnauthorizedError, AppError, NotFoundError } from '../utils/errors';
 import { createAuditLog } from '../utils/audit';
+import { escapeHtml } from '../utils/html-escape';
 
 function parseDeviceInfo(userAgent?: string): string {
   if (!userAgent) return 'Unknown Device';
@@ -301,13 +302,96 @@ export class AuthService {
     });
   }
 
+  async forgotPassword(email: string) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Always return success to prevent email enumeration
+    if (!user || !user.is_active) return { sent: true };
+
+    const crypto = await import('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password_reset_token: resetToken,
+        password_reset_expires: resetExpiry,
+      } as never,
+    });
+
+    // Send reset email (non-blocking)
+    const { emailService } = await import('./email.service');
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    emailService.send({
+      to: user.email,
+      subject: 'Şifre Sıfırlama Talebi',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #4f46e5; color: white; padding: 16px 24px; border-radius: 8px 8px 0 0;">
+            <h2 style="margin: 0;">Şifre Sıfırlama</h2>
+          </div>
+          <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+            <p>Merhaba <strong>${escapeHtml(user.first_name)}</strong>,</p>
+            <p>Şifre sıfırlama talebiniz alındı. Aşağıdaki bağlantıya tıklayarak yeni şifrenizi belirleyebilirsiniz:</p>
+            <a href="${resetUrl}" style="display: inline-block; margin-top: 16px; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 6px;">
+              Şifremi Sıfırla
+            </a>
+            <p style="color: #6b7280; font-size: 14px; margin-top: 16px;">Bu bağlantı 1 saat geçerlidir. Talebi siz yapmadıysanız bu e-postayı görmezden gelebilirsiniz.</p>
+          </div>
+        </div>
+      `,
+    }).catch((err) => logger.error('Failed to send password reset email', { error: err }));
+
+    await createAuditLog({
+      userId: user.id,
+      action: 'password_reset_requested',
+      resourceType: 'auth',
+    });
+
+    return { sent: true };
+  }
+
+  async resetPasswordWithToken(token: string, newPassword: string) {
+    const user = await prisma.user.findFirst({
+      where: {
+        password_reset_token: token,
+        password_reset_expires: { gt: new Date() },
+      } as never,
+    });
+
+    if (!user) throw new AppError('Invalid or expired reset token', 400);
+
+    const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password_hash: newHash,
+        password_reset_token: null,
+        password_reset_expires: null,
+      } as never,
+    });
+
+    // Revoke all sessions
+    await prisma.refreshToken.deleteMany({ where: { user_id: user.id } });
+
+    await createAuditLog({
+      userId: user.id,
+      action: 'password_reset_completed',
+      resourceType: 'auth',
+    });
+
+    return { reset: true };
+  }
+
   static async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, SALT_ROUNDS);
   }
 
   private generateAccessToken(user: { id: number; email: string; role: string }): string {
     const secret = process.env.JWT_SECRET!;
-    const expiresIn = process.env.JWT_EXPIRES_IN || '15m';
+    const expiresIn = (process.env.JWT_EXPIRES_IN || '15m') as string & jwt.SignOptions['expiresIn'];
 
     return jwt.sign(
       { userId: user.id, email: user.email, role: user.role } as JwtPayload,
@@ -318,12 +402,12 @@ export class AuthService {
 
   private generateRefreshToken(user: { id: number; email: string; role: string }): string {
     const secret = process.env.JWT_REFRESH_SECRET!;
-    const expiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+    const expiresIn = (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as string & jwt.SignOptions['expiresIn'];
 
     return jwt.sign(
       { userId: user.id, email: user.email, role: user.role } as JwtPayload,
       secret,
-      { expiresIn }
+      { expiresIn, jwtid: crypto.randomUUID() }
     );
   }
 }

@@ -53,8 +53,10 @@ export const authorizeAction = (action: string, resourceType: string, defaultRol
         next(new ForbiddenError('Bu işlem için yetkiniz bulunmuyor'));
         return;
       }
-    } catch {
-      // DB hatası durumunda default role kontrolüne dön
+    } catch (err) {
+      // Fail-closed: DB hatası durumunda erişimi reddet
+      next(new ForbiddenError('Permission check failed — access denied'));
+      return;
     }
 
     if (!defaultRoles.includes(role)) {

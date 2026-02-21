@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 import { AppError, NotFoundError } from '../utils/errors';
 import { createAuditLog } from '../utils/audit';
 import { filterProjectForRole, canEditField } from '../utils/permissions';
+import { eventBus, APP_EVENTS } from '../utils/event-bus';
 
 interface CreateProjectDto {
   nj_number: string;
@@ -111,6 +112,17 @@ export class ProjectService {
       return created;
     });
 
+    // Emit project assigned event
+    if (data.assigned_designer_id) {
+      eventBus.emitEvent(APP_EVENTS.PROJECT_ASSIGNED, {
+        projectId: project.id,
+        designerId: data.assigned_designer_id,
+        projectTitle: data.title,
+        njNumber: data.nj_number,
+        assignedById: createdById,
+      });
+    }
+
     return await filterProjectForRole(project as unknown as Record<string, unknown>, userRole, createdById);
   }
 
@@ -154,12 +166,17 @@ export class ProjectService {
     return await filterProjectForRole(project as unknown as Record<string, unknown>, userRole, userId);
   }
 
-  async list(params: ListProjectsParams, userRole: UserRole, userId?: number) {
+  async list(params: ListProjectsParams & { include_archived?: boolean }, userRole: UserRole, userId?: number) {
     const page = params.page || 1;
     const limit = params.limit || 20;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};
+
+    // By default, exclude archived projects
+    if (!params.include_archived) {
+      where.is_archived = false;
+    }
 
     if (params.status === 'overdue') {
       where.deadline = { lt: new Date(), not: null };
@@ -229,9 +246,18 @@ export class ProjectService {
     };
   }
 
-  async update(id: number, data: UpdateProjectDto, updatedById: number, userRole: UserRole) {
+  async update(id: number, data: UpdateProjectDto, updatedById: number, userRole: UserRole, expectedUpdatedAt?: Date) {
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) throw new NotFoundError('Project not found');
+
+    // Optimistic locking: reject update if someone else modified the record
+    if (expectedUpdatedAt) {
+      const expected = new Date(expectedUpdatedAt).getTime();
+      const actual = project.updated_at.getTime();
+      if (expected !== actual) {
+        throw new AppError('This project has been modified by another user. Please refresh and try again.', 409);
+      }
+    }
 
     // Ownership check: designer can only update own projects
     if (userRole === 'designer' && project.assigned_designer_id !== updatedById) {
@@ -300,6 +326,28 @@ export class ProjectService {
       oldValue,
       newValue: data,
     });
+
+    // Emit events for assignment or status change
+    if (data.assigned_designer_id && data.assigned_designer_id !== project.assigned_designer_id) {
+      eventBus.emitEvent(APP_EVENTS.PROJECT_ASSIGNED, {
+        projectId: id,
+        designerId: data.assigned_designer_id,
+        projectTitle: updated.title,
+        njNumber: updated.nj_number,
+        assignedById: updatedById,
+      });
+    }
+    if (data.status && data.status !== project.status) {
+      eventBus.emitEvent(APP_EVENTS.PROJECT_STATUS_CHANGED, {
+        projectId: id,
+        fromStatus: project.status,
+        toStatus: data.status,
+        changedById: updatedById,
+        designerId: updated.assigned_designer_id,
+        projectTitle: updated.title,
+        njNumber: updated.nj_number,
+      });
+    }
 
     return await filterProjectForRole(updated as unknown as Record<string, unknown>, userRole, updatedById);
   }
@@ -371,6 +419,29 @@ export class ProjectService {
 
       return result;
     });
+
+    // Emit status change event
+    eventBus.emitEvent(APP_EVENTS.PROJECT_STATUS_CHANGED, {
+      projectId: id,
+      fromStatus: project.status,
+      toStatus: newStatus,
+      changedById: userId,
+      designerId: updated.assigned_designer_id,
+      projectTitle: updated.title,
+      njNumber: updated.nj_number,
+    });
+
+    // Emit revision event if transitioning to revision
+    if (newStatus === 'revision') {
+      const changer = await prisma.user.findUnique({ where: { id: userId }, select: { first_name: true, last_name: true } });
+      eventBus.emitEvent(APP_EVENTS.REVISION_REQUESTED, {
+        projectId: id,
+        designerId: updated.assigned_designer_id,
+        projectTitle: updated.title,
+        njNumber: updated.nj_number,
+        requestedByName: changer ? `${changer.first_name} ${changer.last_name}` : 'System',
+      });
+    }
 
     return await filterProjectForRole(updated as unknown as Record<string, unknown>, userRole, userId);
   }
@@ -525,6 +596,36 @@ export class ProjectService {
       resourceType: 'project',
       newValue: { ids },
     });
+  }
+
+  async archive(id: number, userId: number) {
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) throw new NotFoundError('Project not found');
+    if (project.is_archived) throw new AppError('Project is already archived', 400);
+
+    await prisma.project.update({ where: { id }, data: { is_archived: true } });
+    await createAuditLog({
+      userId,
+      action: 'project_archived',
+      resourceType: 'project',
+      resourceId: id,
+    });
+    return { archived: true };
+  }
+
+  async restore(id: number, userId: number) {
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) throw new NotFoundError('Project not found');
+    if (!project.is_archived) throw new AppError('Project is not archived', 400);
+
+    await prisma.project.update({ where: { id }, data: { is_archived: false } });
+    await createAuditLog({
+      userId,
+      action: 'project_restored',
+      resourceType: 'project',
+      resourceId: id,
+    });
+    return { restored: true };
   }
 
   async requestDeadlineExtension(projectId: number, requestedDate: Date, reason: string, userId: number, userRole: UserRole) {

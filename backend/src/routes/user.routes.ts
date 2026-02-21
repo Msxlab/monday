@@ -40,5 +40,7 @@ router.post('/', authorize('super_admin', 'admin'), (req, res, next) => userCont
 router.get('/:id', authorize('super_admin', 'admin'), (req, res, next) => userController.findById(req, res, next));
 router.patch('/:id', authorize('super_admin', 'admin'), (req, res, next) => userController.update(req, res, next));
 router.post('/:id/reset-password', authorize('super_admin', 'admin'), (req, res, next) => userController.resetPassword(req, res, next));
+router.delete('/:id', authorize('super_admin', 'admin'), (req, res, next) => userController.softDelete(req, res, next));
+router.post('/:id/restore', authorize('super_admin', 'admin'), (req, res, next) => userController.restore(req, res, next));
 
 export default router;

@@ -34,6 +34,15 @@ export class AnalyticsController {
     }
   }
 
+  async getSlaStats(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await analyticsService.getSlaStats();
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getRevisionAnalysis(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = await analyticsService.getRevisionAnalysis();

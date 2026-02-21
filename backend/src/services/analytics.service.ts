@@ -84,6 +84,20 @@ export class AnalyticsService {
   }
 
   private async getWeeklyCompletions() {
+    // Single query: fetch all completed projects in the last 8 weeks
+    const eightWeeksAgo = new Date();
+    eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 8 * 7);
+    eightWeeksAgo.setHours(0, 0, 0, 0);
+
+    const completedProjects = await prisma.project.findMany({
+      where: {
+        status: 'done',
+        actual_finish_date: { gte: eightWeeksAgo },
+      },
+      select: { actual_finish_date: true },
+    });
+
+    // Build week buckets
     const weeks: { week: string; completed: number }[] = [];
     for (let i = 7; i >= 0; i--) {
       const weekEnd = new Date();
@@ -93,12 +107,10 @@ export class AnalyticsService {
       weekStart.setDate(weekStart.getDate() - 6);
       weekStart.setHours(0, 0, 0, 0);
 
-      const count = await prisma.project.count({
-        where: {
-          status: 'done',
-          actual_finish_date: { gte: weekStart, lte: weekEnd },
-        },
-      });
+      const count = completedProjects.filter((p) => {
+        const d = p.actual_finish_date;
+        return d && d >= weekStart && d <= weekEnd;
+      }).length;
 
       weeks.push({
         week: weekStart.toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' }),
@@ -127,83 +139,98 @@ export class AnalyticsService {
       },
     });
 
+    const designerIds = designers.map((d) => d.id);
+    if (designerIds.length === 0) return [];
+
     const now = new Date();
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const results = await Promise.all(
-      designers.map(async (d) => {
-        const [completedThisMonth, completedTotal, overdueProjects, revisionCount] =
-          await Promise.all([
-            prisma.project.count({
-              where: {
-                assigned_designer_id: d.id,
-                status: 'done',
-                actual_finish_date: { gte: monthStart },
-              },
-            }),
-            prisma.project.count({
-              where: {
-                assigned_designer_id: d.id,
-                status: 'done',
-                actual_finish_date: { gte: ninetyDaysAgo },
-              },
-            }),
-            prisma.project.count({
-              where: {
-                assigned_designer_id: d.id,
-                deadline: { lt: now },
-                status: { notIn: ['done', 'cancelled'] },
-              },
-            }),
-            prisma.projectRevision.count({
-              where: {
-                project: { assigned_designer_id: d.id },
-                created_at: { gte: ninetyDaysAgo },
-              },
-            }),
-          ]);
+    // Batch queries: 4 groupBy instead of N×4
+    const [completedThisMonthGroup, completed90Group, overdueGroup, revisionGroup] = await Promise.all([
+      prisma.project.groupBy({
+        by: ['assigned_designer_id'],
+        where: { assigned_designer_id: { in: designerIds }, status: 'done', actual_finish_date: { gte: monthStart } },
+        _count: { id: true },
+      }),
+      prisma.project.groupBy({
+        by: ['assigned_designer_id'],
+        where: { assigned_designer_id: { in: designerIds }, status: 'done', actual_finish_date: { gte: ninetyDaysAgo } },
+        _count: { id: true },
+      }),
+      prisma.project.groupBy({
+        by: ['assigned_designer_id'],
+        where: { assigned_designer_id: { in: designerIds }, deadline: { lt: now }, status: { notIn: ['done', 'cancelled'] } },
+        _count: { id: true },
+      }),
+      prisma.projectRevision.findMany({
+        where: { project: { assigned_designer_id: { in: designerIds } }, created_at: { gte: ninetyDaysAgo } },
+        select: { project: { select: { assigned_designer_id: true } } },
+      }),
+    ]);
 
-        const activeProjects = d._count.assigned_projects;
-        const capacityPct = Math.round((activeProjects / (d.max_capacity || 5)) * 100);
+    // Build lookup maps
+    const monthMap = new Map(completedThisMonthGroup.map((r) => [r.assigned_designer_id, r._count.id]));
+    const d90Map = new Map(completed90Group.map((r) => [r.assigned_designer_id, r._count.id]));
+    const overdueMap = new Map(overdueGroup.map((r) => [r.assigned_designer_id, r._count.id]));
+    const revisionMap = new Map<number, number>();
+    for (const rev of revisionGroup) {
+      const did = rev.project.assigned_designer_id;
+      if (did) revisionMap.set(did, (revisionMap.get(did) || 0) + 1);
+    }
 
-        return {
-          id: d.id,
-          first_name: d.first_name,
-          last_name: d.last_name,
-          role: d.role,
-          activeProjects,
-          maxCapacity: d.max_capacity,
-          capacityPct,
-          completedThisMonth,
-          completedLast90Days: completedTotal,
-          overdueProjects,
-          revisionCount,
-        };
-      })
-    );
+    return designers.map((d) => {
+      const activeProjects = d._count.assigned_projects;
+      const capacityPct = Math.round((activeProjects / (d.max_capacity || 5)) * 100);
 
-    return results;
+      return {
+        id: d.id,
+        first_name: d.first_name,
+        last_name: d.last_name,
+        role: d.role,
+        activeProjects,
+        maxCapacity: d.max_capacity,
+        capacityPct,
+        completedThisMonth: monthMap.get(d.id) || 0,
+        completedLast90Days: d90Map.get(d.id) || 0,
+        overdueProjects: overdueMap.get(d.id) || 0,
+        revisionCount: revisionMap.get(d.id) || 0,
+      };
+    });
   }
 
   async getMonthlyTrend(designerId?: number) {
-    const months: { month: string; completed: number; started: number }[] = [];
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const designerFilter = designerId ? { assigned_designer_id: designerId } : {};
 
+    // 2 queries instead of 12
+    const [completedProjects, startedProjects] = await Promise.all([
+      prisma.project.findMany({
+        where: { ...designerFilter, status: 'done', actual_finish_date: { gte: sixMonthsAgo } },
+        select: { actual_finish_date: true },
+      }),
+      prisma.project.findMany({
+        where: { ...designerFilter, start_date: { gte: sixMonthsAgo } },
+        select: { start_date: true },
+      }),
+    ]);
+
+    const months: { month: string; completed: number; started: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-      const now = new Date();
       const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+      end.setHours(23, 59, 59, 999);
 
-      const designerFilter = designerId ? { assigned_designer_id: designerId } : {};
+      const completed = completedProjects.filter((p) => {
+        const d = p.actual_finish_date;
+        return d && d >= start && d <= end;
+      }).length;
 
-      const [completed, started] = await Promise.all([
-        prisma.project.count({
-          where: { ...designerFilter, status: 'done', actual_finish_date: { gte: start, lte: end } },
-        }),
-        prisma.project.count({
-          where: { ...designerFilter, start_date: { gte: start, lte: end } },
-        }),
-      ]);
+      const started = startedProjects.filter((p) => {
+        const d = p.start_date;
+        return d && d >= start && d <= end;
+      }).length;
 
       months.push({
         month: start.toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' }),
@@ -213,6 +240,66 @@ export class AnalyticsService {
     }
 
     return months;
+  }
+
+  async getSlaStats() {
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+
+    // Completed projects with deadlines (for on-time rate)
+    const completedWithDeadline = await prisma.project.findMany({
+      where: {
+        status: 'done',
+        deadline: { not: null },
+        actual_finish_date: { gte: threeMonthsAgo },
+      },
+      select: { id: true, deadline: true, actual_finish_date: true, nj_number: true, title: true },
+    });
+
+    const onTime = completedWithDeadline.filter((p) => p.actual_finish_date! <= p.deadline!).length;
+    const late = completedWithDeadline.length - onTime;
+    const onTimeRate = completedWithDeadline.length > 0
+      ? Math.round((onTime / completedWithDeadline.length) * 100)
+      : 100;
+
+    // Average delay for late projects (in days)
+    const lateProjects = completedWithDeadline.filter((p) => p.actual_finish_date! > p.deadline!);
+    const avgDelay = lateProjects.length > 0
+      ? Math.round(lateProjects.reduce((sum, p) => {
+          return sum + Math.round((p.actual_finish_date!.getTime() - p.deadline!.getTime()) / (1000 * 60 * 60 * 24));
+        }, 0) / lateProjects.length)
+      : 0;
+
+    // Projects at risk (active, deadline within 3 days or already passed)
+    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const atRisk = await prisma.project.findMany({
+      where: {
+        status: { notIn: ['done', 'cancelled'] },
+        deadline: { not: null, lte: threeDaysFromNow },
+      },
+      select: {
+        id: true,
+        nj_number: true,
+        title: true,
+        status: true,
+        deadline: true,
+        assigned_designer: { select: { first_name: true, last_name: true } },
+      },
+      orderBy: { deadline: 'asc' },
+      take: 20,
+    });
+
+    return {
+      onTimeRate,
+      onTime,
+      late,
+      totalMeasured: completedWithDeadline.length,
+      avgDelayDays: avgDelay,
+      atRiskProjects: atRisk.map((p) => ({
+        ...p,
+        daysUntilDeadline: Math.round((p.deadline!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+      })),
+    };
   }
 
   async getRevisionAnalysis() {

@@ -10,5 +10,7 @@ router.get('/unread-count', notificationController.getUnreadCount.bind(notificat
 router.get('/', notificationController.list.bind(notificationController));
 router.patch('/mark-all-read', notificationController.markAllRead.bind(notificationController));
 router.patch('/:id/read', notificationController.markRead.bind(notificationController));
+router.get('/preferences', notificationController.getPreferences.bind(notificationController));
+router.put('/preferences', notificationController.updatePreferences.bind(notificationController));
 
 export default router;

@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import logger from '../utils/logger';
+import { escapeHtml } from '../utils/html-escape';
 
 interface EmailOptions {
   to: string | string[];
@@ -69,7 +70,7 @@ class EmailService {
           </div>
           <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
             <p style="color: #374151; font-size: 16px;">
-              <strong>${njNumber}</strong> — ${projectTitle} projesinin deadline'ina <strong>${daysLeft} gun</strong> kaldi.
+              <strong>${escapeHtml(njNumber)}</strong> — ${escapeHtml(projectTitle)} projesinin deadline'ina <strong>${daysLeft} gun</strong> kaldi.
             </p>
             <p style="color: #6b7280; font-size: 14px;">
               Deadline: <strong>${deadline.toLocaleDateString('tr-TR')}</strong>
@@ -95,13 +96,13 @@ class EmailService {
           </div>
           <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
             <p style="color: #374151; font-size: 16px;">
-              Merhaba <strong>${userName}</strong>,
+              Merhaba <strong>${escapeHtml(userName)}</strong>,
             </p>
             <p style="color: #374151;">
               ${startDate.toLocaleDateString('tr-TR')} - ${endDate.toLocaleDateString('tr-TR')} tarihli izin talebiniz
               <strong>${isApproved ? 'onaylandi' : 'reddedildi'}</strong>.
             </p>
-            ${reason ? `<p style="color: #6b7280; font-style: italic;">Sebep: ${reason}</p>` : ''}
+            ${reason ? `<p style="color: #6b7280; font-style: italic;">Sebep: ${escapeHtml(reason)}</p>` : ''}
           </div>
         </div>
       `,
@@ -120,10 +121,10 @@ class EmailService {
           </div>
           <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
             <p style="color: #374151; font-size: 16px;">
-              Merhaba <strong>${designerName}</strong>,
+              Merhaba <strong>${escapeHtml(designerName)}</strong>,
             </p>
             <p style="color: #374151;">
-              <strong>${njNumber}</strong> — ${projectTitle} projesi size atandi.
+              <strong>${escapeHtml(njNumber)}</strong> — ${escapeHtml(projectTitle)} projesi size atandi.
             </p>
             <a href="${frontendUrl}" style="display: inline-block; margin-top: 16px; padding: 10px 20px; background: #4f46e5; color: white; text-decoration: none; border-radius: 6px;">
               Projeyi Gor
@@ -144,7 +145,7 @@ class EmailService {
             <h2 style="margin: 0;">Admin Bildirim</h2>
           </div>
           <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <p style="color: #374151;">${message}</p>
+            <p style="color: #374151;">${escapeHtml(message)}</p>
           </div>
         </div>
       `,

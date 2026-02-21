@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { NotFoundError, AppError, ForbiddenError } from '../utils/errors';
 import logger from '../utils/logger';
+import FileType from 'file-type';
 
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads', 'projects');
 
@@ -32,6 +33,28 @@ export class UploadService {
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new NotFoundError('Project not found');
     this.checkProjectAccess(project, userId, userRole);
+
+    // Content-sniffing: verify actual file type matches declared MIME type
+    const ALLOWED_REAL_MIMES = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf', 'application/zip',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ];
+
+    try {
+      const detectedType = await FileType.fromFile(file.path);
+      if (detectedType && !ALLOWED_REAL_MIMES.includes(detectedType.mime)) {
+        // Clean up the uploaded file
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        throw new AppError(`File content type (${detectedType.mime}) does not match allowed types`, 400);
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      // For files that file-type can't detect (CSV, text), fall back to declared mime
+      logger.debug('file-type could not detect type, using declared mime', { mime: file.mimetype });
+    }
 
     return prisma.projectAttachment.create({
       data: {

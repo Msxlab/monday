@@ -51,6 +51,7 @@ const upsertPermissionSchema = z.object({
   field_name: z.string().min(1),
   can_view: z.boolean(),
   can_edit: z.boolean(),
+  can_delete: z.boolean().optional(),
 });
 
 export class SettingsController {

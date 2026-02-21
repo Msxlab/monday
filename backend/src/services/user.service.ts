@@ -223,6 +223,65 @@ export class UserService {
     });
   }
 
+  async softDelete(id: number, deletedById: number) {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundError('User not found');
+    if (!user.is_active) throw new AppError('User is already deactivated', 400);
+
+    // Prevent deleting yourself
+    if (id === deletedById) throw new AppError('You cannot deactivate your own account', 400);
+
+    await prisma.$transaction(async (tx) => {
+      // Deactivate user
+      await tx.user.update({
+        where: { id },
+        data: { is_active: false },
+      });
+
+      // Revoke all sessions
+      await tx.refreshToken.deleteMany({ where: { user_id: id } });
+
+      // Unassign from active projects
+      await tx.project.updateMany({
+        where: { assigned_designer_id: id, status: { notIn: ['done', 'cancelled'] } },
+        data: { assigned_designer_id: null },
+      });
+    });
+
+    await createAuditLog({
+      userId: deletedById,
+      action: 'user_deactivated',
+      resourceType: 'user',
+      resourceId: id,
+      oldValue: { is_active: true },
+      newValue: { is_active: false },
+    });
+
+    return { deactivated: true };
+  }
+
+  async restore(id: number, restoredById: number) {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundError('User not found');
+    if (user.is_active) throw new AppError('User is already active', 400);
+
+    await prisma.user.update({
+      where: { id },
+      data: { is_active: true },
+    });
+
+    await createAuditLog({
+      userId: restoredById,
+      action: 'user_reactivated',
+      resourceType: 'user',
+      resourceId: id,
+      oldValue: { is_active: false },
+      newValue: { is_active: true },
+    });
+
+    return { restored: true };
+  }
+
   async getDesigners() {
     return prisma.user.findMany({
       where: {

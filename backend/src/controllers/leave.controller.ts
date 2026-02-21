@@ -13,6 +13,16 @@ const createLeaveSchema = z.object({
   notes: z.string().optional(),
 });
 
+const adminCreateLeaveSchema = z.object({
+  user_id: z.number().int().positive(),
+  leave_type: z.enum(['annual', 'sick', 'excuse', 'remote']),
+  start_date: z.string().datetime().transform((v) => new Date(v)),
+  end_date: z.string().datetime().transform((v) => new Date(v)),
+  is_half_day: z.boolean().optional(),
+  half_day_period: z.enum(['am', 'pm']).optional(),
+  notes: z.string().optional(),
+});
+
 const rejectLeaveSchema = z.object({
   reason: z.string().optional(),
 });
@@ -112,6 +122,28 @@ export class LeaveController {
       }
       const balance = await leaveService.getBalance(userId);
       res.json({ success: true, data: balance });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async adminCreate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const data = adminCreateLeaveSchema.parse(req.body);
+      const leave = await leaveService.adminCreate(
+        data as Parameters<typeof leaveService.adminCreate>[0],
+        req.user!.userId
+      );
+      res.status(201).json({ success: true, data: leave });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async adminCancel(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const leave = await leaveService.adminCancel(parseId(req.params.id), req.user!.userId);
+      res.json({ success: true, data: leave });
     } catch (err) {
       next(err);
     }

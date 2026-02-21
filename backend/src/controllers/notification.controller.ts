@@ -1,6 +1,8 @@
 import { Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { notificationService } from '../services/notification.service';
 import { AuthRequest } from '../types';
+import prisma from '../utils/prisma';
 
 export class NotificationController {
   async list(req: AuthRequest, res: Response, next: NextFunction) {
@@ -46,6 +48,53 @@ export class NotificationController {
     } catch (err) {
       next(err);
     }
+  }
+
+  async getPreferences(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.userId },
+        select: { notification_preferences: true },
+      });
+      const defaults = {
+        project_assigned: true,
+        project_status_changed: true,
+        project_comment: true,
+        deadline_warning: true,
+        leave_status: true,
+        production_update: true,
+        system_alert: true,
+        email_enabled: false,
+        push_enabled: true,
+      };
+      let prefs = defaults;
+      if (user?.notification_preferences) {
+        try { prefs = { ...defaults, ...JSON.parse(user.notification_preferences) }; } catch { /* use defaults */ }
+      }
+      res.json({ success: true, data: prefs });
+    } catch (err) { next(err); }
+  }
+
+  async updatePreferences(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const schema = z.object({
+        project_assigned: z.boolean().optional(),
+        project_status_changed: z.boolean().optional(),
+        project_comment: z.boolean().optional(),
+        deadline_warning: z.boolean().optional(),
+        leave_status: z.boolean().optional(),
+        production_update: z.boolean().optional(),
+        system_alert: z.boolean().optional(),
+        email_enabled: z.boolean().optional(),
+        push_enabled: z.boolean().optional(),
+      });
+      const body = schema.parse(req.body);
+      await prisma.user.update({
+        where: { id: req.user!.userId },
+        data: { notification_preferences: JSON.stringify(body) },
+      });
+      res.json({ success: true, data: body });
+    } catch (err) { next(err); }
   }
 }
 

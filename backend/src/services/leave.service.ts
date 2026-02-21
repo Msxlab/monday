@@ -2,6 +2,7 @@ import { LeaveStatus, LeaveType } from '@prisma/client';
 import prisma from '../utils/prisma';
 import { AppError, NotFoundError } from '../utils/errors';
 import { createAuditLog } from '../utils/audit';
+import { eventBus, APP_EVENTS } from '../utils/event-bus';
 
 interface CreateLeaveDto {
   leave_type: LeaveType;
@@ -42,6 +43,76 @@ export class LeaveService {
     return updated;
   }
 
+  async adminCreate(data: CreateLeaveDto & { user_id: number }, adminId: number) {
+    const targetUserId = data.user_id;
+    const start = new Date(data.start_date);
+    const end = new Date(data.end_date);
+    if (end < start) throw new AppError('End date cannot be before start date', 400);
+
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) throw new NotFoundError('User not found');
+
+    const overlapping = await prisma.leave.findFirst({
+      where: {
+        user_id: targetUserId,
+        status: { in: ['pending', 'approved'] },
+        start_date: { lte: end },
+        end_date: { gte: start },
+      },
+    });
+    if (overlapping) throw new AppError('Bu tarihlerde zaten bir izin kaydı bulunuyor', 409);
+
+    const leave = await prisma.leave.create({
+      data: {
+        user_id: targetUserId,
+        leave_type: data.leave_type,
+        start_date: start,
+        end_date: end,
+        is_half_day: data.is_half_day ?? false,
+        half_day_period: data.half_day_period ?? null,
+        notes: data.notes,
+        status: 'approved',
+        approved_by_id: adminId,
+      },
+      include: {
+        user: { select: { id: true, first_name: true, last_name: true, email: true } },
+      },
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'leave_admin_created',
+      resourceType: 'leave',
+      resourceId: leave.id,
+      newValue: { leave_type: data.leave_type, start_date: data.start_date, end_date: data.end_date, target_user_id: targetUserId },
+    });
+
+    return leave;
+  }
+
+  async adminCancel(id: number, adminId: number) {
+    const leave = await prisma.leave.findUnique({ where: { id } });
+    if (!leave) throw new NotFoundError('Leave not found');
+    if (['cancelled', 'rejected'].includes(leave.status)) {
+      throw new AppError('Bu izin zaten iptal/reddedilmiş', 400);
+    }
+
+    const updated = await prisma.leave.update({
+      where: { id },
+      data: { status: 'cancelled' },
+    });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'leave_admin_cancelled',
+      resourceType: 'leave',
+      resourceId: id,
+      newValue: { status: 'cancelled_by_admin' },
+    });
+
+    return updated;
+  }
+
   async create(data: CreateLeaveDto, userId: number) {
     const start = new Date(data.start_date);
     const end = new Date(data.end_date);
@@ -56,6 +127,27 @@ export class LeaveService {
       },
     });
     if (overlapping) throw new AppError('Bu tarihlerde zaten bir izin talebiniz bulunuyor', 409);
+
+    // Team capacity check: prevent more than 50% of active team from being on leave
+    const [totalActiveUsers, overlappingLeaves] = await Promise.all([
+      prisma.user.count({ where: { is_active: true, role: { notIn: ['super_admin'] } } }),
+      prisma.leave.count({
+        where: {
+          user_id: { not: userId },
+          status: { in: ['approved'] },
+          start_date: { lte: end },
+          end_date: { gte: start },
+        },
+      }),
+    ]);
+
+    const maxConcurrentLeaves = Math.max(1, Math.floor(totalActiveUsers * 0.5));
+    if (overlappingLeaves >= maxConcurrentLeaves) {
+      throw new AppError(
+        `Bu tarihlerde zaten ${overlappingLeaves} kişi izinli. Takım kapasitesi nedeniyle izin talebi oluşturulamıyor.`,
+        409
+      );
+    }
 
     const leave = await prisma.leave.create({
       data: {
@@ -79,6 +171,14 @@ export class LeaveService {
       resourceType: 'leave',
       resourceId: leave.id,
       newValue: { leave_type: data.leave_type, start_date: data.start_date, end_date: data.end_date },
+    });
+
+    eventBus.emitEvent(APP_EVENTS.LEAVE_CREATED, {
+      userId,
+      userName: `${leave.user.first_name} ${leave.user.last_name}`,
+      startDate: start.toLocaleDateString('tr-TR'),
+      endDate: end.toLocaleDateString('tr-TR'),
+      leaveType: data.leave_type,
     });
 
     return leave;
@@ -146,14 +246,11 @@ export class LeaveService {
       newValue: { status: 'approved' },
     });
 
-    await prisma.notification.create({
-      data: {
-        user_id: leave.user_id,
-        type: 'leave_approved',
-        title: 'İzin Talebiniz Onaylandı',
-        message: `${leave.start_date.toLocaleDateString('tr-TR')} - ${leave.end_date.toLocaleDateString('tr-TR')} tarihli izin talebiniz onaylandı.`,
-        action_url: '/designer/leave',
-      },
+    eventBus.emitEvent(APP_EVENTS.LEAVE_STATUS_CHANGED, {
+      leaveUserId: leave.user_id,
+      status: 'approved',
+      startDate: leave.start_date.toLocaleDateString('tr-TR'),
+      endDate: leave.end_date.toLocaleDateString('tr-TR'),
     });
 
     return updated;
@@ -181,17 +278,31 @@ export class LeaveService {
       newValue: { status: 'rejected', reason },
     });
 
-    await prisma.notification.create({
-      data: {
-        user_id: leave.user_id,
-        type: 'leave_rejected',
-        title: 'İzin Talebiniz Reddedildi',
-        message: `${leave.start_date.toLocaleDateString('tr-TR')} - ${leave.end_date.toLocaleDateString('tr-TR')} tarihli izin talebiniz reddedildi.${reason ? ` Sebep: ${reason}` : ''}`,
-        action_url: '/designer/leave',
-      },
+    eventBus.emitEvent(APP_EVENTS.LEAVE_STATUS_CHANGED, {
+      leaveUserId: leave.user_id,
+      status: 'rejected',
+      startDate: leave.start_date.toLocaleDateString('tr-TR'),
+      endDate: leave.end_date.toLocaleDateString('tr-TR'),
     });
 
     return updated;
+  }
+
+  async delete(id: number, adminId: number) {
+    const leave = await prisma.leave.findUnique({ where: { id } });
+    if (!leave) throw new NotFoundError('Leave not found');
+
+    await prisma.leave.delete({ where: { id } });
+
+    await createAuditLog({
+      userId: adminId,
+      action: 'leave_deleted',
+      resourceType: 'leave',
+      resourceId: id,
+      newValue: { deleted: true },
+    });
+
+    return { id };
   }
 
   async getStats() {

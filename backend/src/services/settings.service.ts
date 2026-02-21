@@ -1,5 +1,7 @@
 import prisma from '../utils/prisma';
 import { NotFoundError } from '../utils/errors';
+import { createAuditLog } from '../utils/audit';
+import { clearPermissionCache } from '../utils/permissions';
 
 export class SettingsService {
   async getNotificationRules() {
@@ -136,9 +138,15 @@ export class SettingsService {
     resource_type: string;
     can_view: boolean;
     can_edit: boolean;
+    can_delete?: boolean;
     set_by_id: number;
   }) {
-    return prisma.permissionOverride.upsert({
+    // Edit→View cascade: if can_edit is true, can_view must also be true
+    const can_view = data.can_edit ? true : data.can_view;
+    const can_edit = !data.can_view ? false : data.can_edit;
+    const can_delete = data.can_delete ?? false;
+
+    const existing = await prisma.permissionOverride.findUnique({
       where: {
         role_field_name_resource_type: {
           role: data.role as never,
@@ -146,16 +154,42 @@ export class SettingsService {
           resource_type: data.resource_type,
         },
       },
-      update: { can_view: data.can_view, can_edit: data.can_edit, set_by_id: data.set_by_id },
+    });
+
+    const result = await prisma.permissionOverride.upsert({
+      where: {
+        role_field_name_resource_type: {
+          role: data.role as never,
+          field_name: data.field_name,
+          resource_type: data.resource_type,
+        },
+      },
+      update: { can_view, can_edit, can_delete, set_by_id: data.set_by_id },
       create: {
         role: data.role as never,
         field_name: data.field_name,
         resource_type: data.resource_type,
-        can_view: data.can_view,
-        can_edit: data.can_edit,
+        can_view,
+        can_edit,
+        can_delete,
         set_by_id: data.set_by_id,
       },
     });
+
+    // Audit trail
+    await createAuditLog({
+      userId: data.set_by_id,
+      action: 'permission_override_changed',
+      resourceType: 'permission_override',
+      resourceId: result.id,
+      oldValue: existing ? { can_view: existing.can_view, can_edit: existing.can_edit, can_delete: existing.can_delete } : null,
+      newValue: { role: data.role, resource_type: data.resource_type, field_name: data.field_name, can_view, can_edit, can_delete },
+    });
+
+    // Clear permission cache so changes take effect immediately
+    clearPermissionCache();
+
+    return result;
   }
 }
 

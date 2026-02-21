@@ -21,9 +21,12 @@ model User {
   is_active     Boolean   @default(true)
   max_capacity  Int       @default(5)
   skills             String?   @db.Text
-  failed_login_count Int       @default(0)
-  locked_until       DateTime?
-  created_at         DateTime  @default(now())
+  failed_login_count      Int       @default(0)
+  locked_until            DateTime?
+  password_reset_token    String?   @db.VarChar(255)
+  password_reset_expires  DateTime?
+  notification_preferences String?  @db.Text
+  created_at              DateTime  @default(now())
   updated_at         DateTime  @updatedAt
   last_login_at      DateTime?
 
@@ -48,6 +51,8 @@ model User {
   set_user_overrides       UserPermissionOverride[]  @relation("UserOverrideSetBy")
   upgrade_requests         RoleUpgradeRequest[]      @relation("UpgradeRequester")
   reviewed_upgrades        RoleUpgradeRequest[]      @relation("UpgradeReviewer")
+  push_subscriptions       PushSubscription[]
+  subtask_assignments      ProjectSubtask[]          @relation("SubtaskAssignee")
 
   @@map("users")
 }
@@ -92,6 +97,7 @@ model Project {
   notes                 String?       @db.Text
   admin_notes           String?       @db.Text
   is_hard_deadline      Boolean       @default(false)
+  is_archived           Boolean       @default(false)
   monday_item_id        String?
   monday_board_id       String?
   created_by_id         Int?
@@ -110,7 +116,14 @@ model Project {
   monday_sync_logs  MondaySyncLog[]
   comments          ProjectComment[]
   attachments       ProjectAttachment[]
+  tag_assignments   ProjectTagAssignment[]
+  subtasks          ProjectSubtask[]
 
+  @@index([assigned_designer_id])
+  @@index([created_by_id])
+  @@index([status])
+  @@index([created_at])
+  @@index([deadline])
   @@map("projects")
 }
 
@@ -202,6 +215,8 @@ model ProjectRevision {
   project      Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
   requested_by User?   @relation("RequestedBy", fields: [requested_by_id], references: [id])
 
+  @@index([project_id])
+  @@index([created_at])
   @@map("project_revisions")
 }
 
@@ -213,18 +228,19 @@ enum RevisionType {
 
 // ─── Proje Durumu Geçmişi ───
 model ProjectStatusHistory {
-  id            Int      @id @default(autoincrement())
+  id            Int            @id @default(autoincrement())
   project_id    Int
-  from_status   String?
-  to_status     String
+  from_status   ProjectStatus?
+  to_status     ProjectStatus
   changed_by_id Int?
   reason        String?
-  notes         String?  @db.Text
-  changed_at    DateTime @default(now())
+  notes         String?        @db.Text
+  changed_at    DateTime       @default(now())
 
   project    Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
   changed_by User?   @relation("ChangedBy", fields: [changed_by_id], references: [id])
 
+  @@index([project_id])
   @@map("project_status_history")
 }
 
@@ -241,6 +257,8 @@ model ProjectComment {
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
   user    User    @relation("CommentAuthor", fields: [user_id], references: [id])
 
+  @@index([project_id])
+  @@index([created_at])
   @@map("project_comments")
 }
 
@@ -275,6 +293,8 @@ model DailyLog {
   user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [project_id], references: [id])
 
+  @@index([user_id, created_at])
+  @@index([project_id])
   @@map("daily_logs")
 }
 
@@ -304,6 +324,8 @@ model Leave {
   user        User  @relation("LeaveUser", fields: [user_id], references: [id], onDelete: Cascade)
   approved_by User? @relation("LeaveApprover", fields: [approved_by_id], references: [id])
 
+  @@index([user_id])
+  @@index([start_date, end_date])
   @@map("leaves")
 }
 
@@ -394,6 +416,8 @@ model Notification {
   user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [project_id], references: [id])
 
+  @@index([user_id, is_read])
+  @@index([created_at])
   @@map("notifications")
 }
 
@@ -417,6 +441,8 @@ model ProductionOrder {
   initiated_by User?   @relation("InitiatedBy", fields: [initiated_by_id], references: [id])
   approved_by  User?   @relation("ApprovedBy", fields: [approved_by_id], references: [id])
 
+  @@index([project_id])
+  @@index([order_status])
   @@map("production_orders")
 }
 
@@ -446,6 +472,9 @@ model AuditLog {
 
   user User? @relation(fields: [user_id], references: [id])
 
+  @@index([user_id])
+  @@index([resource_type, resource_id])
+  @@index([created_at])
   @@map("audit_logs")
 }
 
@@ -483,6 +512,7 @@ model PermissionOverride {
   resource_type String
   can_view      Boolean  @default(false)
   can_edit      Boolean  @default(false)
+  can_delete    Boolean  @default(false)
   set_by_id     Int?
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
@@ -538,4 +568,63 @@ enum RoleUpgradeStatus {
   pending
   approved
   rejected
+}
+
+// ─── Push Subscriptions ───
+model PushSubscription {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  endpoint   String   @db.Text
+  p256dh     String   @db.VarChar(255)
+  auth       String   @db.VarChar(255)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, endpoint(length: 255)])
+  @@map("push_subscriptions")
+}
+
+// ─── Proje Etiketleri ───
+model ProjectTag {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique @db.VarChar(50)
+  color      String   @default("#6366f1") @db.VarChar(10)
+  created_at DateTime @default(now())
+
+  projects ProjectTagAssignment[]
+
+  @@map("project_tags")
+}
+
+model ProjectTagAssignment {
+  id         Int @id @default(autoincrement())
+  project_id Int
+  tag_id     Int
+
+  project ProjectTag @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+  projectRef Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, tag_id])
+  @@index([project_id])
+  @@index([tag_id])
+  @@map("project_tag_assignments")
+}
+
+// ─── Alt Görevler (Subtasks) ───
+model ProjectSubtask {
+  id             Int      @id @default(autoincrement())
+  project_id     Int
+  title          String   @db.VarChar(255)
+  is_completed   Boolean  @default(false)
+  sort_order     Int      @default(0)
+  assigned_to_id Int?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  project     Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  assigned_to User?   @relation("SubtaskAssignee", fields: [assigned_to_id], references: [id])
+
+  @@index([project_id])
+  @@map("project_subtasks")
 }

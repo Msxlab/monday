@@ -6,13 +6,21 @@ import { parseId } from '../utils/parse-id';
 
 const upsertFinancialSchema = z.object({
   project_id: z.number().int().positive(),
-  client_budget: z.number().optional(),
-  project_price: z.number().optional(),
-  cost_price: z.number().optional(),
+  client_budget: z.number().min(0, 'Client budget cannot be negative').optional(),
+  project_price: z.number().min(0, 'Project price cannot be negative').optional(),
+  cost_price: z.number().min(0, 'Cost price cannot be negative').optional(),
   profit_margin: z.number().optional(),
   payment_status: z.enum(['pending', 'partial', 'paid', 'overdue']).optional(),
   invoice_details: z.string().optional(),
-});
+}).refine(
+  (data) => {
+    if (data.cost_price != null && data.project_price != null) {
+      return data.cost_price <= data.project_price;
+    }
+    return true;
+  },
+  { message: 'Cost price cannot exceed project price', path: ['cost_price'] }
+);
 
 const updatePaymentStatusSchema = z.object({
   payment_status: z.enum(['pending', 'partial', 'paid', 'overdue']),
@@ -61,6 +69,17 @@ export class FinanceController {
     try {
       const data = await financeService.getSummary();
       res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async listAll(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+      const data = await financeService.listAll(page, limit);
+      res.json({ success: true, ...data });
     } catch (err) {
       next(err);
     }

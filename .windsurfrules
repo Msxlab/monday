@@ -61,8 +61,9 @@ components/
 
 ## Cron Jobs
 - `jobs/` klasöründe ayrı dosyalar
-- Cron trigger sadece internal endpoint ile (auth token ile korunur)
-- Hata durumunda admin'e email
+- Zamanlama: `node-cron` ile in-process (`scheduler.ts` → `index.ts` başlangıcında `initScheduler()`)
+- cPanel ortamında internal endpoint yerine in-process tercih edilir (tek sunucu, PM2 ile yönetilir)
+- Hata durumunda admin'e bildirim (notification + email)
 
 ## Test
 - Her service için unit test yazılmalı (Jest)

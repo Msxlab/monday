@@ -9,12 +9,13 @@ interface RateLimitEntry {
 const userLimits = new Map<string, RateLimitEntry>();
 
 const CLEANUP_INTERVAL = 60_000;
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of userLimits) {
     if (entry.resetAt < now) userLimits.delete(key);
   }
 }, CLEANUP_INTERVAL);
+cleanupTimer.unref();
 
 export function userRateLimit(maxRequests: number, windowMs: number) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {

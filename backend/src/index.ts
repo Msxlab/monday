@@ -12,6 +12,7 @@ import { errorHandler } from './middleware/error-handler';
 import logger from './utils/logger';
 import prisma from './utils/prisma';
 import { initScheduler } from './jobs/scheduler';
+import { registerNotificationHandlers } from './services/notification-handler';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '5000', 10);
@@ -67,6 +68,7 @@ app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   initScheduler();
+  registerNotificationHandlers();
 });
 
 export default app;

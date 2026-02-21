@@ -176,6 +176,29 @@ export class AuthController {
     }
   }
 
+  async forgotPassword(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { email } = z.object({ email: z.string().email() }).parse(req.body);
+      const result = await authService.forgotPassword(email);
+      res.json({ success: true, message: 'If the email exists, a reset link has been sent.' });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async resetPassword(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { token, password } = z.object({
+        token: z.string().min(1),
+        password: passwordSchema,
+      }).parse(req.body);
+      const result = await authService.resetPasswordWithToken(token, password);
+      res.json({ success: true, message: 'Password has been reset successfully.' });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getLoginHistory(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;

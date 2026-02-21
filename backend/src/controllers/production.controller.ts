@@ -72,6 +72,15 @@ export class ProductionController {
     }
   }
 
+  async delete(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await productionService.delete(parseId(req.params.id), req.user!.userId);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getStats(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const stats = await productionService.getStats();

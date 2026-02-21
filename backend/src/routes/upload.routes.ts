@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { uploadController } from '../controllers/upload.controller';
 import { authenticate } from '../middleware/authenticate';
+import { authorize } from '../middleware/authorize';
 import { userRateLimit } from '../middleware/user-rate-limit';
 
 const storage = multer.diskStorage({
@@ -40,6 +41,7 @@ const upload = multer({
 const router = Router();
 
 router.use(authenticate);
+router.use(authorize('super_admin', 'admin', 'senior_designer', 'designer'));
 
 router.post('/project/:projectId', upload.single('file'), userRateLimit(10, 60_000), uploadController.upload.bind(uploadController));
 router.get('/project/:projectId', uploadController.listByProject.bind(uploadController));

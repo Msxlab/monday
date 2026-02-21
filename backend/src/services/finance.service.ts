@@ -117,28 +117,33 @@ export class FinanceService {
   }
 
   async getSummary() {
-    const financials = await prisma.projectFinancial.findMany({
-      include: {
-        project: {
-          select: { id: true, nj_number: true, title: true, status: true },
-        },
-      },
-    });
+    // Use aggregate instead of loading all records into memory
+    const [aggregates, paymentGroups, totalProjects] = await Promise.all([
+      prisma.projectFinancial.aggregate({
+        _sum: { project_price: true, cost_price: true },
+      }),
+      prisma.projectFinancial.groupBy({
+        by: ['payment_status'],
+        _count: { id: true },
+      }),
+      prisma.projectFinancial.count(),
+    ]);
 
-    const totalRevenue = financials.reduce(
-      (sum, f) => sum + (f.project_price?.toNumber() ?? 0), 0
-    );
-    const totalCost = financials.reduce(
-      (sum, f) => sum + (f.cost_price?.toNumber() ?? 0), 0
-    );
+    const totalRevenue = aggregates._sum.project_price?.toNumber() ?? 0;
+    const totalCost = aggregates._sum.cost_price?.toNumber() ?? 0;
     const totalProfit = totalRevenue - totalCost;
 
     const paymentCounts = {
-      pending: financials.filter((f) => f.payment_status === 'pending').length,
-      partial: financials.filter((f) => f.payment_status === 'partial').length,
-      paid: financials.filter((f) => f.payment_status === 'paid').length,
-      overdue: financials.filter((f) => f.payment_status === 'overdue').length,
+      pending: 0,
+      partial: 0,
+      paid: 0,
+      overdue: 0,
     };
+    for (const g of paymentGroups) {
+      if (g.payment_status in paymentCounts) {
+        paymentCounts[g.payment_status as keyof typeof paymentCounts] = g._count.id;
+      }
+    }
 
     return {
       totalRevenue,
@@ -146,7 +151,30 @@ export class FinanceService {
       totalProfit,
       avgMargin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
       paymentCounts,
-      totalProjects: financials.length,
+      totalProjects,
+    };
+  }
+
+  async listAll(page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [financials, total] = await Promise.all([
+      prisma.projectFinancial.findMany({
+        skip,
+        take: limit,
+        orderBy: { updated_at: 'desc' },
+        include: {
+          project: {
+            select: { id: true, nj_number: true, title: true, status: true },
+          },
+        },
+      }),
+      prisma.projectFinancial.count(),
+    ]);
+
+    return {
+      data: financials,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 }

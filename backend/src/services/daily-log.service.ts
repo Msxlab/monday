@@ -26,17 +26,40 @@ export class DailyLogService {
       if (!project) throw new NotFoundError('Project not found');
     }
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
     if (data.log_type === 'checkin') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
       const existing = await prisma.dailyLog.findFirst({
         where: {
           user_id: userId,
           log_type: 'checkin',
-          log_date: { gte: today },
+          log_date: { gte: today, lt: tomorrow },
         },
       });
       if (existing) throw new AppError('Already checked in today', 409);
+    }
+
+    if (data.log_type === 'checkout') {
+      const checkin = await prisma.dailyLog.findFirst({
+        where: {
+          user_id: userId,
+          log_type: 'checkin',
+          log_date: { gte: today, lt: tomorrow },
+        },
+      });
+      if (!checkin) throw new AppError('You must check in before checking out', 400);
+
+      const existingCheckout = await prisma.dailyLog.findFirst({
+        where: {
+          user_id: userId,
+          log_type: 'checkout',
+          log_date: { gte: today, lt: tomorrow },
+        },
+      });
+      if (existingCheckout) throw new AppError('Already checked out today', 409);
     }
 
     return prisma.dailyLog.create({

@@ -10,6 +10,10 @@ export const createCommentSchema = z.object({
   is_internal: z.boolean().optional(),
 });
 
+const updateCommentSchema = z.object({
+  content: z.string().min(1, 'Comment content is required'),
+});
+
 export class CommentController {
   async create(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -29,6 +33,17 @@ export class CommentController {
 
       const result = await commentService.listByProject(projectId, req.user!.role, req.user!.userId, page, limit);
       res.json({ success: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async update(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = parseId(req.params.id);
+      const { content } = updateCommentSchema.parse(req.body);
+      const comment = await commentService.update(id, content, req.user!.userId, req.user!.role);
+      res.json({ success: true, data: comment });
     } catch (err) {
       next(err);
     }

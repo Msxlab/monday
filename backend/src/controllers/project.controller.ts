@@ -180,6 +180,68 @@ export class ProjectController {
     }
   }
 
+  async exportExcel(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const ExcelJS = await import('exceljs');
+      const result = await projectService.list(
+        { limit: 10000 },
+        req.user!.role,
+        req.user!.userId
+      );
+      const projects = result.data as Record<string, unknown>[];
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Designer Tracker';
+      workbook.created = new Date();
+
+      const sheet = workbook.addWorksheet('Projeler');
+
+      sheet.columns = [
+        { header: 'NJ Numarası', key: 'nj_number', width: 15 },
+        { header: 'Başlık', key: 'title', width: 30 },
+        { header: 'Durum', key: 'status', width: 15 },
+        { header: 'Öncelik', key: 'priority', width: 12 },
+        { header: 'Tasarımcı', key: 'designer', width: 20 },
+        { header: 'Teslim Tarihi', key: 'deadline', width: 15 },
+        { header: 'Oluşturma Tarihi', key: 'created_at', width: 15 },
+        { header: 'Ülke Hedefi', key: 'country_target', width: 12 },
+        { header: 'Proje Tipi', key: 'project_type', width: 15 },
+      ];
+
+      // Style header row
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+      headerRow.alignment = { horizontal: 'center' };
+
+      for (const p of projects) {
+        const designer = p.assigned_designer as { first_name: string; last_name: string } | null;
+        sheet.addRow({
+          nj_number: p.nj_number,
+          title: p.title,
+          status: p.status,
+          priority: p.priority,
+          designer: designer ? `${designer.first_name} ${designer.last_name}` : '',
+          deadline: p.deadline ? new Date(p.deadline as string).toLocaleDateString('tr-TR') : '',
+          created_at: p.created_at ? new Date(p.created_at as string).toLocaleDateString('tr-TR') : '',
+          country_target: p.country_target,
+          project_type: p.project_type,
+        });
+      }
+
+      // Auto-filter
+      sheet.autoFilter = { from: 'A1', to: `I${projects.length + 1}` };
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=projects-${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async bulkUpdateStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { ids, status } = z.object({
@@ -199,6 +261,26 @@ export class ProjectController {
       const { ids } = z.object({ ids: z.array(z.number().int().positive()).min(1) }).parse(req.body);
       await projectService.bulkCancel(ids, req.user!.userId);
       res.json({ success: true, message: `${ids.length} proje iptal edildi` });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async archive(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = parseId(req.params.id);
+      const result = await projectService.archive(id, req.user!.userId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async restore(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = parseId(req.params.id);
+      const result = await projectService.restore(id, req.user!.userId);
+      res.json({ success: true, ...result });
     } catch (error) {
       next(error);
     }

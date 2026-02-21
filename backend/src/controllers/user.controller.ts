@@ -118,6 +118,26 @@ export class UserController {
     }
   }
 
+  async softDelete(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = parseId(req.params.id);
+      const result = await userService.softDelete(id, req.user!.userId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async restore(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const id = parseId(req.params.id);
+      const result = await userService.restore(id, req.user!.userId);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async uploadAvatar(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.file) {

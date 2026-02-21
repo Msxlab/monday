@@ -13,5 +13,6 @@ router.get('/', authorize('super_admin', 'admin', 'production'), productionContr
 router.post('/', authorize('super_admin', 'admin', 'production'), productionController.create.bind(productionController));
 router.get('/:id', authorize('super_admin', 'admin', 'production'), productionController.findById.bind(productionController));
 router.patch('/:id', authorize('super_admin', 'admin', 'production'), productionController.update.bind(productionController));
+router.delete('/:id', authorize('super_admin', 'admin'), productionController.delete.bind(productionController));
 
 export default router;
