@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-const PUBLIC_PATHS = new Set(['/login']);
+const PUBLIC_PATHS = new Set(['/']);
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,9 +16,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const token = window.localStorage.getItem('designer_tracker_token');
+    const token = window.localStorage.getItem('accessToken');
     if (!token) {
-      router.replace('/login');
+      router.replace('/');
       return;
     }
 

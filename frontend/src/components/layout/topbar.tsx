@@ -7,8 +7,8 @@ export function Topbar() {
   const router = useRouter();
 
   const handleLogout = () => {
-    window.localStorage.removeItem('designer_tracker_token');
-    router.push('/login');
+    window.localStorage.removeItem('accessToken');
+    router.push('/');
   };
 
   return (
