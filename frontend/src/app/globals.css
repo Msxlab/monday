@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --border: #e2e8f0;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --accent: #6366f1;
+    --accent-foreground: #ffffff;
+    --primary: #4f46e5;
+    --primary-foreground: #ffffff;
+  }
+
+  .dark {
+    --background: #0c0f1a;
+    --foreground: #e2e8f0;
+    --card: #141829;
+    --card-foreground: #e2e8f0;
+    --border: #1e293b;
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+    --accent: #818cf8;
+    --accent-foreground: #ffffff;
+    --primary: #6366f1;
+    --primary-foreground: #ffffff;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@keyframes bounce-gentle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-bounce-gentle {
+  animation: bounce-gentle 2s ease-in-out infinite;
+}
+
+@keyframes slide-in-from-bottom-4 {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in.slide-in-from-bottom-4 {
+  animation: slide-in-from-bottom-4 0.2s ease-out;
+}
